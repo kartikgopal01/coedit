@@ -3,12 +3,12 @@ import { adminDb } from "@/lib/firebase-admin";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { FieldValue } from "firebase-admin/firestore";
 
-export async function POST(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const user = await clerkClient().users.getUser(userId);
+    const user = await (await clerkClient()).users.getUser(userId);
     const emails = [
       user.primaryEmailAddress?.emailAddress,
       ...user.emailAddresses.map((e) => e.emailAddress),
@@ -18,7 +18,8 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
       return NextResponse.json({ error: "User has no email" }, { status: 400 });
     }
 
-    const docRef = adminDb.collection("documents").doc(params.id);
+    const { id } = await params;
+    const docRef = adminDb.collection("documents").doc(id);
     const docSnap = await docRef.get();
     if (!docSnap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
