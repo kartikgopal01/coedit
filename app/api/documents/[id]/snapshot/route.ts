@@ -17,7 +17,7 @@ export async function POST(
     if (!userId)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { delta } = await request.json();
+    const { delta, commitMessage } = await request.json();
     if (!delta)
       return NextResponse.json({ error: "Delta required" }, { status: 400 });
 
@@ -47,17 +47,16 @@ export async function POST(
     });
     await s3Client.send(putCmd);
 
-    // Write Firestore metadata with proper structure
-    const versionData: Omit<VersionMeta, "id"> = {
+    // Write Firestore metadata with proper structure to match VersionHistory component
+    const versionData: any = {
       versionId,
-      fileKey: s3Key,
+      timestamp: new Date().toISOString(),
+      createdBy: userId,
+      s3Key,
       fileName,
       fileType: "application/json",
       size: JSON.stringify(delta).length,
-      createdAt: timestamp as any,
-      createdByUserId: userId,
-      commitMessage: "Auto-saved snapshot",
-      downloadStrategy: "presigned",
+      commitMessage: commitMessage || "No commit message provided",
     };
 
     await docRef.collection("versions").doc(versionId).set(versionData);

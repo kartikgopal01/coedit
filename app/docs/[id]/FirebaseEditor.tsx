@@ -15,6 +15,15 @@ import { useEffect, useRef, useState } from "react";
 import { db } from "@/lib/firebase-client";
 import "quill/dist/quill.snow.css";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 
 type QuillType = typeof import("quill");
 
@@ -36,6 +45,9 @@ export default function FirebaseEditor({ docId }: { docId: string }) {
   const quillRef = useRef<any>(null);
   const cursorsModuleRef = useRef<any>(null);
   const [isReady, setIsReady] = useState(false);
+  const [showCommitDialog, setShowCommitDialog] = useState(false);
+  const [commitMessage, setCommitMessage] = useState("");
+  const [isSavingSnapshot, setIsSavingSnapshot] = useState(false);
   const savingTimer = useRef<number | null>(null);
   const isApplyingRemote = useRef(false);
   const { isSignedIn, userId } = useAuth();
@@ -284,12 +296,20 @@ export default function FirebaseEditor({ docId }: { docId: string }) {
 
       setIsReady(true);
 
+      // Allow parent/page to open the commit dialog
+      const openDialog = () => {
+        setCommitMessage("");
+        setShowCommitDialog(true);
+      };
+      window.addEventListener("open-commit-dialog", openDialog);
+
       return () => {
         window.removeEventListener("beforeunload", onBeforeUnload);
         window.removeEventListener(
           "apply-delta",
           onApplyDelta as EventListener,
         );
+        window.removeEventListener("open-commit-dialog", openDialog);
         quill.off("selection-change", onSelection);
       };
     };
@@ -303,26 +323,41 @@ export default function FirebaseEditor({ docId }: { docId: string }) {
     };
   }, [docId, isSignedIn, userId]);
 
-  const handleSaveSnapshot = async () => {
-    if (!quillRef.current) return;
+  const handleSaveSnapshot = () => {
+    setCommitMessage("");
+    setShowCommitDialog(true);
+  };
+
+  const handleConfirmSaveSnapshot = async () => {
+    if (!quillRef.current || !commitMessage.trim()) return;
+
+    setIsSavingSnapshot(true);
     try {
       const delta = (quillRef.current as any).getContents();
       console.log("Saving snapshot with delta:", delta);
+
       const response = await fetch(`/api/documents/${docId}/snapshot`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ delta }),
+        body: JSON.stringify({ delta, commitMessage: commitMessage.trim() }),
       });
+
       if (!response.ok) {
         const detail = await response.text();
         console.error("Failed to save snapshot", response.status, detail);
         return;
       }
+
       const result = await response.json();
       console.log("Snapshot saved:", result);
+
+      setShowCommitDialog(false);
+      setCommitMessage("");
     } catch (error) {
       console.error("Error saving snapshot:", error);
+    } finally {
+      setIsSavingSnapshot(false);
     }
   };
 
@@ -335,12 +370,56 @@ export default function FirebaseEditor({ docId }: { docId: string }) {
         <Button
           type="button"
           onClick={handleSaveSnapshot}
-          disabled={!isReady}
+          disabled={!isReady || isSavingSnapshot}
         >
-          Save Snapshot
+          {isSavingSnapshot ? "Saving..." : "Save Snapshot"}
         </Button>
       </div>
       <div ref={containerRef} className="min-h-[400px]" />
+
+      {/* Commit Message Dialog */}
+      <Dialog open={showCommitDialog} onOpenChange={setShowCommitDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Save Snapshot</DialogTitle>
+            <DialogDescription>
+              Enter a commit message to describe the changes you're saving.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label htmlFor="commit-message" className="text-sm font-medium">
+                Commit Message
+              </label>
+              <Textarea
+                id="commit-message"
+                value={commitMessage}
+                onChange={(e) => setCommitMessage(e.target.value)}
+                placeholder="Describe your changes..."
+                rows={3}
+                className="resize-none"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowCommitDialog(false)}
+              disabled={isSavingSnapshot}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmSaveSnapshot}
+              disabled={isSavingSnapshot || !commitMessage.trim()}
+            >
+              {isSavingSnapshot ? "Saving..." : "Save Snapshot"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

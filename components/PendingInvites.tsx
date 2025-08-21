@@ -80,6 +80,20 @@ export default function PendingInvites() {
     }
   };
 
+  const formatMaybeTimestamp = (value: any): string => {
+    try {
+      if (!value) return "";
+      if (typeof value === 'string' || typeof value === 'number') {
+        return format(new Date(value), "MMM d, yyyy");
+      }
+      if (typeof value === 'object') {
+        if (typeof value.toDate === 'function') return format(value.toDate(), "MMM d, yyyy");
+        if (value._seconds) return format(new Date(value._seconds * 1000), "MMM d, yyyy");
+      }
+    } catch {}
+    return "";
+  };
+
   if (loading) {
     return (
       <Card className="shadow-sm">
@@ -182,7 +196,7 @@ export default function PendingInvites() {
                   {invite.documentTitle}
                 </h4>
                 <p className="text-sm text-muted-foreground">
-                  Invited {format(invite.invite.createdAt.toDate(), "MMM d, yyyy")}
+                  Invited {formatMaybeTimestamp(invite.invite.createdAt)}
                 </p>
               </div>
               <div className="flex gap-2 ml-4">

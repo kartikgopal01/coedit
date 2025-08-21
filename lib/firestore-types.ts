@@ -14,16 +14,23 @@ export interface DocumentData {
 }
 
 // Version metadata stored in Firestore
+// Supports both legacy (createdAt/fileKey/createdByUserId) and new (timestamp/s3Key/createdBy) fields
 export interface VersionMeta {
   versionId: string;
-  fileKey: string; // S3 object key
+  // New schema
+  s3Key?: string; // S3 object key (new)
+  timestamp?: string; // ISO string (new)
+  createdBy?: string; // userId (new)
+  // Legacy schema
+  fileKey?: string; // S3 object key (legacy)
+  createdAt?: Timestamp; // Firestore Timestamp (legacy)
+  createdByUserId?: string; // userId (legacy)
+  // Common metadata
   fileName: string;
   fileType: string;
   size: number;
-  createdAt: Timestamp;
-  createdByUserId: string;
   commitMessage?: string;
-  downloadStrategy: "presigned";
+  downloadStrategy?: "presigned";
 }
 
 // Presence data for real-time collaboration

@@ -10,34 +10,33 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get all documents that have invites for this user
-    const documentsSnapshot = await adminDb.collection("documents").get();
+    // Read from the user's invite inbox for fast dashboard loading
+    const inboxSnap = await adminDb
+      .collection("users")
+      .doc(userId)
+      .collection("invites")
+      .get();
+
     const pendingInvites: Array<{
       documentId: string;
       documentTitle: string;
       invite: InviteData;
     }> = [];
 
-    for (const docSnapshot of documentsSnapshot.docs) {
-      const documentData = docSnapshot.data();
-      const inviteRef = docSnapshot.ref.collection("invites").doc(userId);
-      const inviteSnapshot = await inviteRef.get();
-
-      if (inviteSnapshot.exists) {
-        const inviteData = inviteSnapshot.data() as InviteData;
-
-        // Only include pending invites that haven't expired
-        if (inviteData.status === "pending" &&
-            inviteData.expiresAt &&
-            inviteData.expiresAt.toDate() > new Date()) {
-          pendingInvites.push({
-            documentId: docSnapshot.id,
-            documentTitle: documentData.title || "Untitled",
-            invite: inviteData,
-          });
-        }
+    inboxSnap.forEach((inboxDoc) => {
+      const data = inboxDoc.data() as any;
+      const invite = data.invite as InviteData;
+      if (!invite) return;
+      const expires = invite.expiresAt as any;
+      const notExpired = !expires || (typeof expires.toDate === 'function' ? expires.toDate() : new Date(expires)) > new Date();
+      if (invite.status === 'pending' && notExpired) {
+        pendingInvites.push({
+          documentId: data.documentId,
+          documentTitle: data.documentTitle || 'Untitled',
+          invite,
+        });
       }
-    }
+    });
 
     return NextResponse.json({ invites: pendingInvites });
   } catch (error) {

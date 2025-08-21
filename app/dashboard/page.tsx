@@ -35,6 +35,7 @@ import {
 import { RiMoreLine, RiEditLine, RiDeleteBinLine, RiFileTextLine, RiLoader4Line } from "@remixicon/react";
 import { db } from "@/lib/firebase-client";
 import type { DocumentData } from "@/lib/firestore-types";
+import PendingInvites from "@/components/PendingInvites";
 
 // Utility function to format Firebase timestamps
 const formatTimestamp = (timestamp: any) => {
@@ -304,6 +305,13 @@ export default function DashboardPage() {
                   )}
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* Pending Invites Section */}
+          <div className="grid gap-8 lg:gap-12">
+            <div className="md:col-span-2">
+              <PendingInvites />
             </div>
           </div>
 

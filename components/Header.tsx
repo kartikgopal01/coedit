@@ -95,6 +95,21 @@ export default function Header() {
     }
   };
 
+  // Safe date formatter for Firestore Timestamp | ISO | epoch
+  const formatMaybeTimestamp = (value: any): string => {
+    try {
+      if (!value) return "";
+      if (typeof value === 'string' || typeof value === 'number') {
+        return format(new Date(value), "MMM d, yyyy");
+      }
+      if (typeof value === 'object') {
+        if (typeof value.toDate === 'function') return format(value.toDate(), "MMM d, yyyy");
+        if (value._seconds) return format(new Date(value._seconds * 1000), "MMM d, yyyy");
+      }
+    } catch {}
+    return "";
+  };
+
   // Close mobile menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -182,7 +197,7 @@ export default function Header() {
                             {invite.documentTitle}
                           </h5>
                           <p className="text-xs text-muted-foreground">
-                            {format(invite.invite.createdAt.toDate(), "MMM d, yyyy")}
+                            {formatMaybeTimestamp(invite.invite.createdAt)}
                           </p>
                         </div>
                         <div className="flex gap-1 ml-2">
@@ -309,7 +324,7 @@ export default function Header() {
                                 {invite.documentTitle}
                               </h5>
                               <p className="text-xs text-muted-foreground">
-                                {format(invite.invite.createdAt.toDate(), "MMM d, yyyy")}
+                                {formatMaybeTimestamp(invite.invite.createdAt)}
                               </p>
                             </div>
                             <div className="flex gap-1 ml-2">

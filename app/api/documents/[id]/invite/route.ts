@@ -1,5 +1,5 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { type NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import type { InviteData } from "@/lib/firestore-types";
@@ -35,10 +35,10 @@ export async function POST(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Check if user exists in Clerk
+    // Check if user exists in Clerk (support both old/new clerkClient shapes)
     try {
-      const client = await clerkClient();
-      const users = await client.users.getUserList({
+      const cc: any = typeof (clerkClient as any) === 'function' ? await (clerkClient as any)() : (clerkClient as any);
+      const users = await cc.users.getUserList({
         emailAddress: [email],
       });
 
@@ -62,16 +62,34 @@ export async function POST(
         );
       }
 
-      // Create invite
+      // Create invite (expires in 7 days)
+      const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
       const inviteData: Omit<InviteData, "id"> = {
         email,
         invitedBy: userId,
         status: "pending",
         createdAt: FieldValue.serverTimestamp() as any,
-        expiresAt: FieldValue.serverTimestamp() as any, // Set to 7 days from now
+        expiresAt: Timestamp.fromDate(new Date(Date.now() + sevenDaysMs)) as any,
       };
 
       await inviteRef.set(inviteData);
+
+      // Fan-out to the invited user's dashboard inbox for quick access
+      try {
+        const inboxRef = adminDb
+          .collection("users")
+          .doc(invitedUserId)
+          .collection("invites")
+          .doc(id);
+
+        await inboxRef.set({
+          documentId: id,
+          documentTitle: data.title || 'Untitled',
+          invite: inviteData,
+        }, { merge: true });
+      } catch (inboxError) {
+        console.error("Failed to write invite to user's inbox:", inboxError);
+      }
 
       return NextResponse.json({
         message: "Invitation sent successfully",
