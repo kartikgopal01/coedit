@@ -44,7 +44,7 @@ interface Collaborator {
 }
 
 export default function DocumentSidebar({ docId, onRollback }: DocumentSidebarProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(true);
   const [activeTab, setActiveTab] = useState<'history' | 'collaborators' | 'invite' | 'share' | 'invites'>('history');
   const [documentData, setDocumentData] = useReactState<DocumentData | null>(null);
   const [collaborators, setCollaborators] = useReactState<Collaborator[]>([]);
@@ -52,6 +52,7 @@ export default function DocumentSidebar({ docId, onRollback }: DocumentSidebarPr
   const [pendingInvites, setPendingInvites] = useReactState<any[]>([]);
   const { userId } = useAuth();
   const { user: currentUser } = useUser();
+  // Fixed width sidebar (40rem)
 
 
 
@@ -176,8 +177,18 @@ export default function DocumentSidebar({ docId, onRollback }: DocumentSidebarPr
     );
   }
 
+  // Click outside overlay closes the sidebar
+
   return (
-    <div className="fixed right-0 top-16 h-full w-auto bg-background border-l border-border shadow-lg z-40 flex flex-col">
+    <>
+      {/* Click-outside overlay */}
+      <div
+        className="fixed inset-0 z-30"
+        onClick={() => setIsCollapsed(true)}
+      />
+      <div
+        className="fixed right-0 top-16 h-full w-[40rem] bg-background border-l border-border shadow-lg z-40 flex flex-col select-none"
+      >
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b">
         <h3 className="font-semibold">Document Tools</h3>
@@ -344,6 +355,7 @@ export default function DocumentSidebar({ docId, onRollback }: DocumentSidebarPr
           </div>
         )}
       </div>
-    </div>
+      </div>
+    </>
   );
 }

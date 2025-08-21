@@ -6,6 +6,10 @@ import {
   RiGlobalLine,
   RiShieldCheckLine,
   RiTeamLine,
+  RiMagicLine,
+  RiVolumeUpLine,
+  RiDownloadLine,
+  RiUserLine,
 } from "@remixicon/react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
@@ -20,9 +24,9 @@ import {
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">
+    <div className="bg-gradient-to-br from-background via-background to-muted/20">
       {/* Hero Section */}
-      <section className="relative overflow-hidden">
+      <section className="min-h-screen relative overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-16">
           <div className="text-center">
             <Badge variant="secondary" className="mb-4">
@@ -40,9 +44,9 @@ export default function LandingPage() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button size="lg" asChild>
-                <Link href="/dashboard">
+                <Link href="/dashboard" className="flex items-center group">
                   Get Started Free
-                  <RiArrowRightLine className="ml-2 h-4 w-4" />
+                  <RiArrowRightLine className="h-4 w-4" />
                 </Link>
               </Button>
               <Button variant="outline" size="lg" asChild>
@@ -54,8 +58,11 @@ export default function LandingPage() {
       </section>
 
       {/* Features Section */}
-      <section id="features" className="py-20 bg-muted/30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section
+        id="features"
+        className="py-20 bg-muted/30 min-h-screen flex items-center justify-center w-full"
+      >
+        <div className="container px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">
               Everything you need for team collaboration
@@ -66,8 +73,8 @@ export default function LandingPage() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            <Card className="border-0 shadow-lg">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+            <Card className="border-0 shadow-lg flex-1">
               <CardHeader>
                 <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
                   <RiTeamLine className="w-6 h-6 text-primary" />
@@ -76,6 +83,18 @@ export default function LandingPage() {
                 <CardDescription>
                   Multiple users can edit simultaneously with live cursors and
                   instant sync
+                </CardDescription>
+              </CardHeader>
+            </Card>
+
+            <Card className="border-0 shadow-lg">
+              <CardHeader>
+                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
+                  <RiMagicLine className="w-6 h-6 text-primary" />
+                </div>
+                <CardTitle>AI Tools</CardTitle>
+                <CardDescription>
+                  Summarize content, explain version diffs, and use speech I/O
                 </CardDescription>
               </CardHeader>
             </Card>
@@ -113,8 +132,20 @@ export default function LandingPage() {
                 </div>
                 <CardTitle>Rich Text Editor</CardTitle>
                 <CardDescription>
-                  Powerful TipTap editor with formatting, lists, and
+                  Powered by Quill editor with formatting, lists, and
                   collaborative features
+                </CardDescription>
+              </CardHeader>
+            </Card>
+
+            <Card className="border-0 shadow-lg">
+              <CardHeader>
+                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
+                  <RiUserLine className="w-6 h-6 text-primary" />
+                </div>
+                <CardTitle>Live Presence</CardTitle>
+                <CardDescription>
+                  See collaborators' cursors and selections update in real time
                 </CardDescription>
               </CardHeader>
             </Card>
@@ -148,68 +179,14 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="py-20">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <Card className="border-0 shadow-xl bg-gradient-to-r from-primary/5 to-primary/10">
-            <CardContent className="p-12">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4">
-                Ready to transform your document workflow?
-              </h2>
-              <p className="text-lg text-muted-foreground mb-8">
-                Join thousands of teams who are already collaborating more
-                effectively
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Button size="lg" asChild>
-                  <Link href="/dashboard">
-                    Start Collaborating Now
-                    <RiArrowRightLine className="ml-2 h-4 w-4" />
-                  </Link>
-                </Button>
-                <Button variant="outline" size="lg">
-                  Watch Demo
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </section>
-
       {/* Footer */}
       <footer className="border-t bg-muted/30 py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center">
-            <h3 className="text-xl font-bold mb-2">CoEdit</h3>
+          <div className="flex flex-col items-center gap-2 justify-center">
+            <img src="/logo.svg" alt="CoEdit" className="w-10 h-10" />
             <p className="text-muted-foreground mb-4">
               Real-time collaborative documents with version control
             </p>
-            <div className="flex justify-center space-x-6 text-sm text-muted-foreground">
-              <Link
-                href="/dashboard"
-                className="hover:text-foreground transition-colors"
-              >
-                Dashboard
-              </Link>
-              <Link
-                href="/docs/new"
-                className="hover:text-foreground transition-colors"
-              >
-                Create Document
-              </Link>
-              <a
-                href="/privacy"
-                className="hover:text-foreground transition-colors"
-              >
-                Privacy
-              </a>
-              <a
-                href="/terms"
-                className="hover:text-foreground transition-colors"
-              >
-                Terms
-              </a>
-            </div>
           </div>
         </div>
       </footer>

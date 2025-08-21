@@ -1,12 +1,13 @@
 "use client";
 
-import { useAuth } from "@clerk/nextjs";
+import { useAuth, useUser } from "@clerk/nextjs";
 import {
   collection,
   deleteDoc,
   deleteField,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
   serverTimestamp,
   setDoc,
@@ -25,6 +26,17 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { jsPDF } from "jspdf";
+import {
+  RiMagicLine,
+  RiMicLine,
+  RiVolumeUpLine,
+  RiDownloadLine,
+  RiSaveLine,
+  RiStopLine,
+} from "@remixicon/react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 type QuillType = typeof import("quill");
 
@@ -61,8 +73,16 @@ export default function FirebaseEditor({ docId }: { docId: string }) {
   const [interim, setInterim] = useState("");
   const [isSpeaking, setIsSpeaking] = useState(false);
   const savingTimer = useRef<number | null>(null);
+  const slowSavingTimer = useRef<number | null>(null);
   const isApplyingRemote = useRef(false);
   const { isSignedIn, userId } = useAuth();
+  const [lastEditAt, setLastEditAt] = useState<number>(0);
+  const [lastSnapshotAt, setLastSnapshotAt] = useState<number>(0);
+  const [hasAnySnapshot, setHasAnySnapshot] = useState<boolean>(false);
+  const [downloadOpen, setDownloadOpen] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadCommitMessage, setDownloadCommitMessage] = useState("");
+  const { user } = useUser();
 
   useEffect(() => {
     if (!isSignedIn) return;
@@ -134,7 +154,7 @@ export default function FirebaseEditor({ docId }: { docId: string }) {
                 delta: deleteField(),
                 updatedAt: serverTimestamp(),
               } as any,
-              { merge: true },
+              { merge: true }
             );
             console.log("Successfully migrated delta field to deltaOps");
           } catch (error) {
@@ -161,45 +181,62 @@ export default function FirebaseEditor({ docId }: { docId: string }) {
             q.setContents(incoming);
             if (sel) {
               // Restore selection to avoid cursor jump to start
-              try { q.setSelection(sel.index, sel.length ?? 0, "silent"); } catch {}
+              try {
+                q.setSelection(sel.index, sel.length ?? 0, "silent");
+              } catch {}
             }
           }
         } catch {}
       });
 
-      // Push local edits to Firestore (debounced)
+      // Push local edits to Firestore with word-boundary gating
       quill.on("text-change", (_delta: any, _old: any, source: string) => {
         if (source !== "user") return;
-        if (savingTimer.current) window.clearTimeout(savingTimer.current);
-        savingTimer.current = window.setTimeout(async () => {
+        setLastEditAt(Date.now());
+
+        // Determine if this input contains a whitespace (space, tab, newline)
+        const insertedText = Array.isArray(_delta?.ops)
+          ? _delta.ops
+              .map((o: any) => (typeof o.insert === "string" ? o.insert : ""))
+              .join("")
+          : "";
+        const hasWordBoundary = /\s/.test(insertedText);
+
+        const persist = async () => {
           try {
             isApplyingRemote.current = true;
             const delta = quill.getContents();
-            console.log("Saving delta to Firestore:", {
-              deltaOps: delta.ops,
-              deltaOpsType: typeof delta.ops,
-              deltaOpsLength: delta.ops?.length,
-              updatedAt: serverTimestamp(),
-            });
             await setDoc(
               docRef,
               {
                 deltaOps: delta.ops,
                 updatedAt: serverTimestamp(),
               } as FirestoreDeltaDoc,
-              { merge: true },
+              { merge: true }
             );
-            console.log("Successfully saved to Firestore");
           } catch (error) {
             console.error("Failed to save to Firestore:", error);
-            throw error;
           } finally {
-            // Release after a tick so snapshot handler can skip echo
             setTimeout(() => {
               isApplyingRemote.current = false;
             }, 0);
           }
-        }, 150);
+        };
+
+        // Fast debounce when a word boundary is typed; otherwise slow idle flush
+        if (savingTimer.current) window.clearTimeout(savingTimer.current);
+        if (slowSavingTimer.current) window.clearTimeout(slowSavingTimer.current);
+
+        if (hasWordBoundary) {
+          savingTimer.current = window.setTimeout(() => {
+            void persist();
+          }, 120);
+        } else {
+          // User is typing within a word; flush after brief idle to avoid lag
+          slowSavingTimer.current = window.setTimeout(() => {
+            void persist();
+          }, 1200);
+        }
       });
 
       // Rollback handler: accept external delta JSON and persist
@@ -222,7 +259,7 @@ export default function FirebaseEditor({ docId }: { docId: string }) {
               deltaOps: ops,
               updatedAt: serverTimestamp(),
             } as FirestoreDeltaDoc,
-            { merge: true },
+            { merge: true }
           );
         } catch (error) {
           console.error("Rollback: Failed to save to Firestore:", error);
@@ -234,12 +271,21 @@ export default function FirebaseEditor({ docId }: { docId: string }) {
       const presenceCol = collection(db, "documents", docId, "presence");
       const myPresenceRef = doc(presenceCol, userId ?? "anonymous");
 
-      const color = `hsl(${Math.abs((userId ?? "anon").split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % 360}, 70%, 50%)`;
-      const name = userId ?? "anonymous";
+      const color = `hsl(${
+        Math.abs(
+          (userId ?? "anon").split("").reduce((a, c) => a + c.charCodeAt(0), 0)
+        ) % 360
+      }, 70%, 50%)`;
+      const displayName =
+        (user?.fullName && user.fullName.trim()) ||
+        (user as any)?.username ||
+        (user as any)?.primaryEmailAddress?.emailAddress ||
+        userId ||
+        "anonymous";
 
       const writePresence = async (index: number, length: number) => {
         const presenceData = {
-          name,
+          name: displayName,
           color,
           index,
           length,
@@ -247,7 +293,7 @@ export default function FirebaseEditor({ docId }: { docId: string }) {
         } as PresenceDoc;
         console.log("Writing presence to Firestore:", {
           ...presenceData,
-          nameType: typeof name,
+          nameType: typeof displayName,
           colorType: typeof color,
           indexType: typeof index,
           lengthType: typeof length,
@@ -295,7 +341,7 @@ export default function FirebaseEditor({ docId }: { docId: string }) {
           }
           try {
             if (!cursors.cursors?.[id]) {
-              cursors.createCursor(id, data.name, data.color);
+              cursors.createCursor(id, data.name || id, data.color);
             }
             cursors.moveCursor(id, {
               index: data.index,
@@ -322,14 +368,31 @@ export default function FirebaseEditor({ docId }: { docId: string }) {
       };
       window.addEventListener("open-commit-dialog", openDialog);
 
+      // Track latest snapshot timestamp to detect unsaved state
+      try {
+        const versionsCol = collection(db, "documents", docId, "versions");
+        onSnapshot(versionsCol, (snap) => {
+          let latest = 0;
+          setHasAnySnapshot(snap.size > 0);
+          snap.docs.forEach((d) => {
+            const v: any = d.data();
+            const t = v.createdAt?.toMillis?.() ?? (v.timestamp ? Date.parse(v.timestamp) : 0);
+            if (t && t > latest) latest = t;
+          });
+          if (latest) setLastSnapshotAt(latest);
+        });
+      } catch {}
+
       return () => {
         window.removeEventListener("beforeunload", onBeforeUnload);
         window.removeEventListener(
           "apply-delta",
-          onApplyDelta as EventListener,
+          onApplyDelta as EventListener
         );
         window.removeEventListener("open-commit-dialog", openDialog);
         quill.off("selection-change", onSelection);
+        if (savingTimer.current) window.clearTimeout(savingTimer.current);
+        if (slowSavingTimer.current) window.clearTimeout(slowSavingTimer.current);
       };
     };
 
@@ -386,19 +449,22 @@ export default function FirebaseEditor({ docId }: { docId: string }) {
       setIsSummarizing(true);
       const q = quillRef.current as any;
       const range = q.getSelection();
-      const text = range && range.length > 0 ? q.getText(range.index, range.length) : q.getText();
-      const res = await fetch('/api/ai/summarize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ text })
+      const text =
+        range && range.length > 0
+          ? q.getText(range.index, range.length)
+          : q.getText();
+      const res = await fetch("/api/ai/summarize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ text }),
       });
       if (!res.ok) return;
       const { summary } = await res.json();
       setSummaryText(summary || "");
       setShowSummaryDialog(true);
     } catch (e) {
-      console.error('Summarize failed', e);
+      console.error("Summarize failed", e);
     } finally {
       setIsSummarizing(false);
     }
@@ -407,46 +473,54 @@ export default function FirebaseEditor({ docId }: { docId: string }) {
   // AI: Trigger audio file select and send to transcribe
   const handleChooseAudio = () => {
     if (!fileInputRef.current) return;
-    fileInputRef.current.value = '';
+    fileInputRef.current.value = "";
     fileInputRef.current.click();
   };
 
-  const handleAudioSelected: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
+  const handleAudioSelected: React.ChangeEventHandler<
+    HTMLInputElement
+  > = async (e) => {
     try {
       const file = e.target.files?.[0];
       if (!file) return;
       const fd = new FormData();
-      fd.append('file', file);
-      const res = await fetch('/api/ai/transcribe', { method: 'POST', body: fd, credentials: 'include' });
+      fd.append("file", file);
+      const res = await fetch("/api/ai/transcribe", {
+        method: "POST",
+        body: fd,
+        credentials: "include",
+      });
       if (!res.ok) return;
       const { text } = await res.json();
       const q = quillRef.current as any;
       const range = q.getSelection();
-      const insertAt = range ? range.index : (q.getLength?.() ?? 0);
-      q.insertText(insertAt, `\n[Transcript]\n${text}\n`, 'silent');
+      const insertAt = range ? range.index : q.getLength?.() ?? 0;
+      q.insertText(insertAt, `\n[Transcript]\n${text}\n`, "silent");
     } catch (err) {
-      console.error('Transcription failed', err);
+      console.error("Transcription failed", err);
     }
   };
 
   // Live dictation using Web Speech API with visual animation and dynamic insertion
   const startListening = () => {
     try {
-      const SR: any = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      const SR: any =
+        (window as any).SpeechRecognition ||
+        (window as any).webkitSpeechRecognition;
       if (!SR) {
-        console.warn('SpeechRecognition not supported in this browser');
+        console.warn("SpeechRecognition not supported in this browser");
         return;
       }
       const recog = new SR();
       recognitionRef.current = recog;
       recog.continuous = true;
       recog.interimResults = true;
-      recog.lang = 'en-US';
+      recog.lang = "en-US";
       setInterim("");
       setIsListening(true);
 
       const q = quillRef.current as any;
-      let anchorIndex = (q?.getSelection?.()?.index) ?? (q?.getLength?.() ?? 0);
+      let anchorIndex = q?.getSelection?.()?.index ?? q?.getLength?.() ?? 0;
 
       recog.onresult = (event: any) => {
         let interimText = "";
@@ -458,38 +532,51 @@ export default function FirebaseEditor({ docId }: { docId: string }) {
         }
         // Insert final text and keep interim as a lightweight preview
         if (finalText && q) {
-          q.insertText(anchorIndex, finalText + " ", 'silent');
+          q.insertText(anchorIndex, finalText + " ", "silent");
           anchorIndex += (finalText + " ").length;
-          q.setSelection(anchorIndex, 0, 'silent');
+          q.setSelection(anchorIndex, 0, "silent");
           // Persist to Firestore so collaborators receive updates
           try {
             const ref = docRefRef.current;
             if (ref) {
               const currentDelta = q.getContents();
               isApplyingRemote.current = true;
-              void setDoc(ref, {
-                deltaOps: currentDelta.ops,
-                updatedAt: serverTimestamp(),
-              } as any, { merge: true });
-              setTimeout(() => { isApplyingRemote.current = false; }, 0);
+              void setDoc(
+                ref,
+                {
+                  deltaOps: currentDelta.ops,
+                  updatedAt: serverTimestamp(),
+                } as any,
+                { merge: true }
+              );
+              setTimeout(() => {
+                isApplyingRemote.current = false;
+              }, 0);
             }
           } catch (e) {
-            console.error('Failed to sync dictated text:', e);
+            console.error("Failed to sync dictated text:", e);
           }
         }
         setInterim(interimText);
       };
 
-      recog.onerror = () => { stopListening(); };
-      recog.onend = () => { setIsListening(false); setInterim(""); };
+      recog.onerror = () => {
+        stopListening();
+      };
+      recog.onend = () => {
+        setIsListening(false);
+        setInterim("");
+      };
       recog.start();
     } catch (err) {
-      console.error('listen failed', err);
+      console.error("listen failed", err);
     }
   };
 
   const stopListening = () => {
-    try { recognitionRef.current?.stop?.(); } catch {}
+    try {
+      recognitionRef.current?.stop?.();
+    } catch {}
     setIsListening(false);
     setInterim("");
   };
@@ -501,25 +588,43 @@ export default function FirebaseEditor({ docId }: { docId: string }) {
       const synth = window.speechSynthesis;
       const voices = synth?.getVoices?.() || [];
       const preferNames = [
-        'female', 'woman', 'Google UK English Female', 'Google US English',
-        'Samantha', 'Victoria', 'Karen', 'Tessa', 'Serena', 'Moira', 'Zira', 'Salli'
+        "female",
+        "woman",
+        "Google UK English Female",
+        "Google US English",
+        "Samantha",
+        "Victoria",
+        "Karen",
+        "Tessa",
+        "Serena",
+        "Moira",
+        "Zira",
+        "Salli",
       ];
-      const byName = voices.find(v => preferNames.some(n => v.name.toLowerCase().includes(n.toLowerCase())));
+      const byName = voices.find((v) =>
+        preferNames.some((n) => v.name.toLowerCase().includes(n.toLowerCase()))
+      );
       if (byName) return byName;
       // fallback: first en-* voice
-      const byLang = voices.find(v => v.lang?.toLowerCase().startsWith('en'));
+      const byLang = voices.find((v) => v.lang?.toLowerCase().startsWith("en"));
       return byLang || voices[0] || null;
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   };
 
   // Warm up voices and remember preferred one
   useEffect(() => {
-    const synth = typeof window !== 'undefined' ? window.speechSynthesis : null;
+    const synth = typeof window !== "undefined" ? window.speechSynthesis : null;
     if (!synth) return;
-    const update = () => { preferredVoiceRef.current = pickFemaleVoice(); };
+    const update = () => {
+      preferredVoiceRef.current = pickFemaleVoice();
+    };
     update();
-    synth.addEventListener?.('voiceschanged', update as any);
-    return () => { synth.removeEventListener?.('voiceschanged', update as any); };
+    synth.addEventListener?.("voiceschanged", update as any);
+    return () => {
+      synth.removeEventListener?.("voiceschanged", update as any);
+    };
   }, []);
 
   const startTTS = () => {
@@ -528,21 +633,30 @@ export default function FirebaseEditor({ docId }: { docId: string }) {
       if (!synth) return;
       const q = quillRef.current as any;
       const range = q?.getSelection?.();
-      const text = range && range.length > 0 ? q.getText(range.index, range.length) : q.getText();
+      const text =
+        range && range.length > 0
+          ? q.getText(range.index, range.length)
+          : q.getText();
       if (!text?.trim()) return;
       const utt = new SpeechSynthesisUtterance(text);
       const voice = preferredVoiceRef.current || pickFemaleVoice();
       if (voice) utt.voice = voice;
       utt.rate = 1.0;
       utt.pitch = 1.1; // slightly brighter
-      utt.onend = () => { setIsSpeaking(false); ttsUtteranceRef.current = null; };
-      utt.onerror = () => { setIsSpeaking(false); ttsUtteranceRef.current = null; };
+      utt.onend = () => {
+        setIsSpeaking(false);
+        ttsUtteranceRef.current = null;
+      };
+      utt.onerror = () => {
+        setIsSpeaking(false);
+        ttsUtteranceRef.current = null;
+      };
       ttsUtteranceRef.current = utt;
       synth.cancel();
       synth.speak(utt);
       setIsSpeaking(true);
     } catch (e) {
-      console.error('TTS failed', e);
+      console.error("TTS failed", e);
     }
   };
 
@@ -554,73 +668,270 @@ export default function FirebaseEditor({ docId }: { docId: string }) {
     ttsUtteranceRef.current = null;
   };
 
-  // Download current content as PDF
-  const handleDownloadPdf = () => {
+  // Generate PDF from plain text
+  const generatePdfFromText = (text: string) => {
+    const doc = new jsPDF({ unit: "pt", format: "a4" });
+    const margin = 48;
+    const width = doc.internal.pageSize.getWidth() - margin * 2;
+    const height = doc.internal.pageSize.getHeight();
+    const lines = doc.splitTextToSize(text, width);
+    let y = margin;
+    const lineHeight = 16;
+    lines.forEach((line: string) => {
+      if (y > height - margin) {
+        doc.addPage();
+        y = margin;
+      }
+      doc.text(line, margin, y);
+      y += lineHeight;
+    });
+    doc.save(`document-${new Date().toISOString().slice(0, 10)}.pdf`);
+  };
+
+  // Download latest snapshot delta -> text -> PDF
+  const downloadLatestSnapshotPdf = async () => {
+    setDownloading(true);
+    try {
+      const versionsCol = collection(db, "documents", docId, "versions");
+      const snap = await getDocs(versionsCol);
+      const items: any[] = [];
+      snap.docs.forEach((d) => items.push(d.data()));
+      items.sort((a, b) => {
+        const at = a.createdAt?.toMillis?.() ?? (a.timestamp ? Date.parse(a.timestamp) : 0);
+        const bt = b.createdAt?.toMillis?.() ?? (b.timestamp ? Date.parse(b.timestamp) : 0);
+        return bt - at;
+      });
+      const latest = items[0];
+      if (!latest) {
+        // Fallback: use current editor text
+        const q = quillRef.current as any;
+        const text = q?.getText?.() || "";
+        generatePdfFromText(text);
+        return;
+      }
+      const key = latest.s3Key ?? latest.fileKey;
+      if (!key) {
+        const q = quillRef.current as any;
+        const text = q?.getText?.() || "";
+        generatePdfFromText(text);
+        return;
+      }
+      const res = await fetch("/api/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ fileKey: key }),
+      });
+      if (!res.ok) {
+        const q = quillRef.current as any;
+        const text = q?.getText?.() || "";
+        generatePdfFromText(text);
+        return;
+      }
+      const { downloadUrl } = await res.json();
+      const delta = await fetch(downloadUrl).then((r) => r.json());
+      const ops = Array.isArray(delta?.ops) ? delta.ops : delta;
+      const text = Array.isArray(ops)
+        ? ops.map((o: any) => (typeof o.insert === "string" ? o.insert : " ")).join("")
+        : "";
+      generatePdfFromText(text);
+    } catch (e) {
+      console.error("Download latest snapshot failed", e);
+      try {
+        const q = quillRef.current as any;
+        const text = q?.getText?.() || "";
+        generatePdfFromText(text);
+      } catch {}
+    } finally {
+      setDownloading(false);
+      setDownloadOpen(false);
+    }
+  };
+
+  // Save a snapshot of current content, then download that snapshot
+  const saveSnapshotAndDownload = async () => {
+    setDownloading(true);
     try {
       const q = quillRef.current as any;
-      const text = q?.getText?.() || "";
-      const doc = new jsPDF({ unit: "pt", format: "a4" });
-      const margin = 48;
-      const width = doc.internal.pageSize.getWidth() - margin * 2;
-      const height = doc.internal.pageSize.getHeight();
-      const lines = doc.splitTextToSize(text, width);
-      let y = margin;
-      const lineHeight = 16;
-      lines.forEach((line: string) => {
-        if (y > height - margin) {
-          doc.addPage();
-          y = margin;
-        }
-        doc.text(line, margin, y);
-        y += lineHeight;
+      const delta = q?.getContents?.();
+      if (!delta) {
+        // fallback to current text
+        const text = q?.getText?.() || "";
+        generatePdfFromText(text);
+        return;
+      }
+      const res = await fetch(`/api/documents/${docId}/snapshot`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          delta,
+          commitMessage: downloadCommitMessage.trim() || "Snapshot before PDF download",
+        }),
       });
-      doc.save(`document-${new Date().toISOString().slice(0, 10)}.pdf`);
+      if (!res.ok) {
+        const text = q?.getText?.() || "";
+        generatePdfFromText(text);
+        return;
+      }
+      const { fileKey } = await res.json();
+      if (!fileKey) {
+        const text = q?.getText?.() || "";
+        generatePdfFromText(text);
+        return;
+      }
+      const down = await fetch("/api/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ fileKey }),
+      });
+      if (!down.ok) {
+        const text = q?.getText?.() || "";
+        generatePdfFromText(text);
+        return;
+      }
+      const { downloadUrl } = await down.json();
+      const snapshotDelta = await fetch(downloadUrl).then((r) => r.json());
+      const ops = Array.isArray(snapshotDelta?.ops) ? snapshotDelta.ops : snapshotDelta;
+      const text = Array.isArray(ops)
+        ? ops.map((o: any) => (typeof o.insert === "string" ? o.insert : " ")).join("")
+        : "";
+      generatePdfFromText(text);
     } catch (e) {
-      console.error("PDF export failed", e);
+      console.error("Save snapshot and download failed", e);
+      try {
+        const q = quillRef.current as any;
+        const text = q?.getText?.() || "";
+        generatePdfFromText(text);
+      } catch {}
+    } finally {
+      setDownloading(false);
+      setDownloadOpen(false);
+      setDownloadCommitMessage("");
     }
+  };
+
+  // Download button clicked
+  const handleDownloadClick = () => {
+    // Always ask: let user choose to save snapshot (with message) or download latest
+    setDownloadOpen(true);
   };
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-gray-500">
-          {isReady ? "Connected (Firebase)" : "Connecting..."}
+      <div className="flex flex-wrap items-center justify-between gap-y-2">
+        <div className="flex items-center gap-2 text-sm text-gray-500">
+          <span
+            aria-label={isReady ? "connected" : "connecting"}
+            className={`inline-block h-2.5 w-2.5 rounded-full ${
+              isReady ? "bg-green-500" : "bg-amber-500 animate-pulse"
+            }`}
+          />
+          <span>{isReady ? "Connected (Firebase)" : "Connecting..."}</span>
         </div>
-        <div className="flex items-center gap-2">
-          <Button type="button" variant="outline" onClick={handleSummarize} disabled={!isReady || isSummarizing}>{isSummarizing ? 'Summarizing…' : 'Summarize'}</Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleSummarize}
+            disabled={!isReady || isSummarizing}
+          >
+            <RiMagicLine className="h-4 w-4 mr-1" />{" "}
+            {isSummarizing ? "Summarizing…" : "Summarize"}
+          </Button>
           {!isListening ? (
-            <Button type="button" variant="outline" onClick={startListening} disabled={!isReady}>Dictate</Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={startListening}
+              disabled={!isReady}
+            >
+              <RiMicLine className="h-4 w-4" />
+            </Button>
           ) : (
-            <Button type="button" variant="destructive" onClick={stopListening}>Stop</Button>
+            <Button type="button" variant="destructive" onClick={stopListening}>
+              <RiStopLine className="h-4 w-4" />
+            </Button>
           )}
           {!isSpeaking ? (
-            <Button type="button" variant="outline" onClick={startTTS} disabled={!isReady}>Read</Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={startTTS}
+              disabled={!isReady}
+            >
+              <RiVolumeUpLine className="h-4 w-4" />
+            </Button>
           ) : (
-            <Button type="button" variant="destructive" onClick={stopTTS}>Stop TTS</Button>
+            <Button type="button" variant="destructive" onClick={stopTTS}>
+              <RiStopLine className="h-4 w-4" />
+            </Button>
           )}
-          <Button type="button" variant="outline" onClick={handleDownloadPdf} disabled={!isReady}>Download PDF</Button>
-        <Button
-          type="button"
-          onClick={handleSaveSnapshot}
+          <Popover open={downloadOpen} onOpenChange={setDownloadOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleDownloadClick}
+                disabled={!isReady || downloading}
+              >
+                <RiDownloadLine className="h-4 w-4" /> {downloading ? "Preparing…" : "Download PDF"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-72">
+              <div className="space-y-2 text-sm">
+                <div className="font-medium">Download PDF</div>
+                <p className="text-muted-foreground">Save a new snapshot with a commit message, then we'll download the latest snapshot.</p>
+                <div className="space-y-1">
+                  <label className="text-xs">Commit message</label>
+                  <Textarea
+                    rows={2}
+                    value={downloadCommitMessage}
+                    onChange={(e) => setDownloadCommitMessage(e.target.value)}
+                    placeholder="e.g., Exporting current draft"
+                  />
+                </div>
+                <div className="flex gap-2 justify-end pt-1">
+                  <Button variant="outline" size="sm" onClick={() => setDownloadOpen(false)} disabled={downloading}>Cancel</Button>
+                  <Button size="sm" onClick={() => void saveSnapshotAndDownload()} disabled={downloading || !downloadCommitMessage.trim()}>
+                    {downloading ? "Saving…" : "Save & Download"}
+                  </Button>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+          <Button
+            type="button"
+            onClick={handleSaveSnapshot}
             disabled={!isReady || isSavingSnapshot}
-        >
+          >
+            <RiSaveLine className="h-4 w-4 mr-1" />{" "}
             {isSavingSnapshot ? "Saving..." : "Save Snapshot"}
-        </Button>
+          </Button>
         </div>
       </div>
       <div className="relative">
-      <div ref={containerRef} className="min-h-[400px]" />
+        <div ref={containerRef} className="min-h-[400px]" />
         {isListening && (
           <div className="absolute top-2 right-2 flex items-center gap-2 bg-background/70 backdrop-blur border rounded px-3 py-2">
             <div className="relative h-3 w-3">
               <span className="absolute inset-0 rounded-full bg-red-500 animate-ping opacity-60" />
               <span className="absolute inset-0 rounded-full bg-red-500" />
             </div>
-            <span className="text-xs text-muted-foreground">Listening… {interim && <em className="opacity-70">{interim}</em>}</span>
+            <span className="text-xs text-muted-foreground">
+              Listening… {interim && <em className="opacity-70">{interim}</em>}
+            </span>
           </div>
         )}
       </div>
-      <input ref={fileInputRef} type="file" accept="audio/*" onChange={handleAudioSelected} className="hidden" />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="audio/*"
+        onChange={handleAudioSelected}
+        className="hidden"
+      />
 
       {/* Summary Dialog */}
       <Dialog open={showSummaryDialog} onOpenChange={setShowSummaryDialog}>
@@ -631,18 +942,37 @@ export default function FirebaseEditor({ docId }: { docId: string }) {
               Generated by AI. You can insert it into the document.
             </DialogDescription>
           </DialogHeader>
-          <div className="bg-muted p-3 rounded text-sm whitespace-pre-wrap max-h-72 overflow-auto">{summaryText || 'No summary.'}</div>
+          <div className="prose prose-sm dark:prose-invert max-w-none bg-muted p-3 rounded max-h-72 overflow-auto">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {summaryText || "No summary."}
+            </ReactMarkdown>
+          </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowSummaryDialog(false)}>Close</Button>
-            <Button onClick={() => {
-              try {
-                const q = quillRef.current as any;
-                const range = q.getSelection();
-                const insertAt = range ? range.index + range.length : (q.getLength?.() ?? 0);
-                q.insertText(insertAt, `\nSummary:\n${summaryText}\n`, 'silent');
-              } catch {}
-              setShowSummaryDialog(false);
-            }}>Insert into editor</Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowSummaryDialog(false)}
+            >
+              Close
+            </Button>
+            <Button
+              onClick={() => {
+                try {
+                  const q = quillRef.current as any;
+                  const range = q.getSelection();
+                  const insertAt = range
+                    ? range.index + range.length
+                    : q.getLength?.() ?? 0;
+                  q.insertText(
+                    insertAt,
+                    `\nSummary:\n${summaryText}\n`,
+                    "silent"
+                  );
+                } catch {}
+                setShowSummaryDialog(false);
+              }}
+            >
+              Insert into editor
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -9,6 +9,7 @@ import {
 } from "@clerk/nextjs";
 import { RiCloseLine, RiMenuLine, RiMailLine, RiCheckLine, RiCloseLine as RiXLine, RiLoader4Line } from "@remixicon/react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,7 @@ export default function Header() {
   const [invites, setInvites] = useState<PendingInvite[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingInvite, setProcessingInvite] = useState<string | null>(null);
+  const pathname = usePathname();
 
   const closeMobileMenu = useCallback(() => setIsMobileMenuOpen(false), []);
 
@@ -134,7 +136,7 @@ export default function Header() {
         href="/"
         className="text-xl font-bold hover:text-primary transition-colors"
       >
-        CoEdit
+        <img src="/logo.svg" alt="CoEdit" className="w-10 h-10" />
       </Link>
 
       {/* Desktop Navigation */}
@@ -149,6 +151,7 @@ export default function Header() {
           </SignUpButton>
         </SignedOut>
         <SignedIn>
+          {(pathname === "/dashboard" || pathname.startsWith("/docs/")) && (
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="ghost" size="sm" className="relative h-9 w-9 p-0">
@@ -234,6 +237,7 @@ export default function Header() {
               </div>
             </PopoverContent>
           </Popover>
+          )}
           <Button variant="ghost" asChild>
             <Link href="/dashboard">Dashboard</Link>
           </Button>
@@ -275,6 +279,7 @@ export default function Header() {
               </SignUpButton>
             </SignedOut>
             <SignedIn>
+              {(pathname === "/dashboard" || pathname.startsWith("/docs/")) && (
               <Popover>
                 <PopoverTrigger asChild>
                   <Button variant="ghost" className="w-full justify-start relative">
@@ -361,6 +366,7 @@ export default function Header() {
                   </div>
                 </PopoverContent>
               </Popover>
+              )}
               <Button
                 variant="ghost"
                 asChild

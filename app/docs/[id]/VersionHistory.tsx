@@ -45,6 +45,7 @@ export default function VersionHistory({
   const [diffOpen, setDiffOpen] = useState<AnyVersionMeta | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
   const [diffText, setDiffText] = useState("");
+  const [userProfiles, setUserProfiles] = useState<Map<string, any>>(new Map());
 
   useEffect(() => {
     const colRef = collection(db, "documents", docId, "versions");
@@ -63,6 +64,44 @@ export default function VersionHistory({
     });
     return () => unsub();
   }, [docId]);
+
+  // Resolve user profiles for author display (supports both createdByUserId and UID-like createdBy)
+  useEffect(() => {
+    const isLikelyUserId = (s: unknown): s is string => {
+      if (typeof s !== 'string') return false;
+      if (!s) return false;
+      if (s.startsWith('user_') || s.startsWith('usr_') || s.startsWith('clerk_')) return true;
+      // Generic long token without spaces/email
+      if (s.length >= 20 && !s.includes('@') && !s.includes(' ')) return true;
+      return false;
+    };
+
+    const ids = Array.from(new Set(
+      versions.flatMap((v) => {
+        const list: string[] = [];
+        if (v.createdByUserId) list.push(v.createdByUserId);
+        if (isLikelyUserId(v.createdBy)) list.push(v.createdBy as string);
+        return list;
+      })
+    ));
+    if (ids.length === 0) return;
+    const load = async () => {
+      try {
+        const res = await fetch('/api/users/profiles', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ ids })
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const map = new Map<string, any>();
+        for (const p of data.profiles || []) map.set(p.id, p);
+        setUserProfiles(map);
+      } catch {}
+    };
+    void load();
+  }, [versions]);
 
   const handleRollback = async (key: string | undefined) => {
     if (!key) return;
@@ -200,7 +239,27 @@ export default function VersionHistory({
                 ) : null}
               </div>
               <div className="text-gray-500 text-xs">
-                {formatWhen(v)} {v.createdBy || v.createdByUserId ? `• by ${v.createdBy ?? v.createdByUserId}` : ""}
+                {formatWhen(v)}{
+                  (() => {
+                    const isLikelyUserId = (s: unknown): s is string => {
+                      if (typeof s !== 'string') return false;
+                      if (!s) return false;
+                      if (s.startsWith('user_') || s.startsWith('usr_') || s.startsWith('clerk_')) return true;
+                      if (s.length >= 20 && !s.includes('@') && !s.includes(' ')) return true;
+                      return false;
+                    };
+                    let label = '';
+                    if (v.createdByUserId) {
+                      label = userProfiles.get(v.createdByUserId)?.name || (typeof v.createdBy === 'string' && !isLikelyUserId(v.createdBy) ? v.createdBy : '');
+                    } else if (isLikelyUserId(v.createdBy)) {
+                      const id = v.createdBy as string;
+                      label = userProfiles.get(id)?.name || '';
+                    } else if (typeof v.createdBy === 'string') {
+                      label = v.createdBy;
+                    }
+                    return label ? ` • by ${label}` : '';
+                  })()
+                }
               </div>
             </div>
             <div className="flex items-center gap-2">

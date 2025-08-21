@@ -2,7 +2,15 @@
 
 import { SignedIn, SignedOut, useAuth } from "@clerk/nextjs";
 import { format } from "date-fns";
-import { collection, onSnapshot, query, where, doc, updateDoc, deleteDoc } from "firebase/firestore";
+import {
+  collection,
+  onSnapshot,
+  query,
+  where,
+  doc,
+  updateDoc,
+  deleteDoc,
+} from "firebase/firestore";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -32,10 +40,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { RiMoreLine, RiEditLine, RiDeleteBinLine, RiFileTextLine, RiLoader4Line } from "@remixicon/react";
+import {
+  RiMoreLine,
+  RiEditLine,
+  RiDeleteBinLine,
+  RiFileTextLine,
+  RiLoader4Line,
+} from "@remixicon/react";
 import { db } from "@/lib/firebase-client";
 import type { DocumentData } from "@/lib/firestore-types";
-import PendingInvites from "@/components/PendingInvites";
+// Removed PendingInvites card in favor of header notifications on dashboard
 
 // Utility function to format Firebase timestamps
 const formatTimestamp = (timestamp: any) => {
@@ -68,11 +82,14 @@ export default function DashboardPage() {
   const [deletingDocId, setDeletingDocId] = useState<string | null>(null);
   const [newDocTitle, setNewDocTitle] = useState("");
   const [newDocDescription, setNewDocDescription] = useState("");
+  const [ownerNames, setOwnerNames] = useState<
+    Record<string, { name: string; email?: string; imageUrl?: string }>
+  >({});
 
   // Redirect to sign-in if not authenticated
   useEffect(() => {
     if (isLoaded && !userId) {
-      router.push('/sign-in');
+      router.push("/sign-in");
     }
   }, [isLoaded, userId, router]);
 
@@ -80,11 +97,11 @@ export default function DashboardPage() {
     if (!userId) return;
     const ownedQ = query(
       collection(db, "documents"),
-      where("ownerId", "==", userId),
+      where("ownerId", "==", userId)
     );
     const sharedQ = query(
       collection(db, "documents"),
-      where("collaborators", "array-contains", userId),
+      where("collaborators", "array-contains", userId)
     );
     const unsubOwned = onSnapshot(ownedQ, (snap) => {
       const items: DocumentData[] = [];
@@ -106,6 +123,37 @@ export default function DashboardPage() {
     };
   }, [userId]);
 
+  // Fetch owner profile names for shared docs
+  useEffect(() => {
+    const fetchOwners = async () => {
+      try {
+        const ids = Array.from(
+          new Set(sharedDocs.map((d) => d.ownerId).filter(Boolean))
+        );
+        if (ids.length === 0) return;
+        const res = await fetch("/api/users/profiles", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ ids }),
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const map: Record<
+          string,
+          { name: string; email?: string; imageUrl?: string }
+        > = {};
+        for (const p of data.profiles || []) {
+          map[p.id] = { name: p.name, email: p.email, imageUrl: p.imageUrl };
+        }
+        setOwnerNames((prev) => ({ ...prev, ...map }));
+      } catch (e) {
+        console.error("Failed to fetch owner profiles", e);
+      }
+    };
+    fetchOwners();
+  }, [sharedDocs]);
+
   // Show loading state while auth is loading
   if (!isLoaded) {
     return (
@@ -124,9 +172,7 @@ export default function DashboardPage() {
           <p className="text-muted-foreground mb-4">
             Please sign in to access your dashboard.
           </p>
-          <Button onClick={() => router.push('/sign-in')}>
-            Sign In
-          </Button>
+          <Button onClick={() => router.push("/sign-in")}>Sign In</Button>
         </div>
       </div>
     );
@@ -268,7 +314,7 @@ export default function DashboardPage() {
                 </Button>
 
                 {/* Divider */}
-                <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center gap-3">
                   <span className="text-sm text-muted-foreground px-2">or</span>
                 </div>
 
@@ -282,7 +328,9 @@ export default function DashboardPage() {
                         setJoinError(""); // Clear error when user types
                       }}
                       placeholder="Paste a share link to collaborate"
-                      className={`w-full sm:w-80 h-10 ${joinError ? "border-destructive" : ""}`}
+                      className={`w-full sm:w-80 h-10 ${
+                        joinError ? "border-destructive" : ""
+                      }`}
                     />
                     <Button
                       onClick={handleCollaborate}
@@ -305,13 +353,6 @@ export default function DashboardPage() {
                   )}
                 </div>
               </div>
-            </div>
-          </div>
-
-          {/* Pending Invites Section */}
-          <div className="grid gap-8 lg:gap-12">
-            <div className="md:col-span-2">
-              <PendingInvites />
             </div>
           </div>
 
@@ -355,10 +396,16 @@ export default function DashboardPage() {
                     </div>
                   )}
                   {ownedDocs.map((d) => (
-                    <Card key={d.id} className="hover:bg-muted/50 transition-all duration-200">
+                    <Card
+                      key={d.id}
+                      className="hover:bg-muted/50 transition-all duration-200"
+                    >
                       <CardContent>
                         <div className="flex items-start justify-between gap-3">
-                          <Link href={`/docs/${d.id}`} className="flex-1 min-w-0">
+                          <Link
+                            href={`/docs/${d.id}`}
+                            className="flex-1 min-w-0"
+                          >
                             <div className="font-medium text-base mb-1 truncate">
                               {d.title || "Untitled"}
                             </div>
@@ -374,12 +421,18 @@ export default function DashboardPage() {
 
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0"
+                              >
                                 <RiMoreLine className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => handleEditDocument(d)}>
+                              <DropdownMenuItem
+                                onClick={() => handleEditDocument(d)}
+                              >
                                 <RiEditLine className="h-4 w-4 mr-2" />
                                 Edit
                               </DropdownMenuItem>
@@ -426,10 +479,16 @@ export default function DashboardPage() {
                     </div>
                   )}
                   {sharedDocs.map((d) => (
-                    <Card key={d.id} className="hover:bg-muted/50 transition-all duration-200 border-l-4 border-l-secondary/20 hover:border-l-secondary/40">
+                    <Card
+                      key={d.id}
+                      className="hover:bg-muted/50 transition-all duration-200"
+                    >
                       <CardContent>
                         <div className="flex items-start justify-between gap-3">
-                          <Link href={`/docs/${d.id}`} className="flex-1 min-w-0">
+                          <Link
+                            href={`/docs/${d.id}`}
+                            className="flex-1 min-w-0"
+                          >
                             <div className="font-medium text-base mb-1 truncate">
                               {d.title || "Untitled"}
                             </div>
@@ -439,18 +498,24 @@ export default function DashboardPage() {
                               </div>
                             )}
                             <div className="text-xs text-muted-foreground">
-                              Owner: {d.ownerId}
+                              Owner: {ownerNames[d.ownerId]?.name || d.ownerId}
                             </div>
                           </Link>
 
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0"
+                              >
                                 <RiMoreLine className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => handleEditDocument(d)}>
+                              <DropdownMenuItem
+                                onClick={() => handleEditDocument(d)}
+                              >
                                 <RiEditLine className="h-4 w-4 mr-2" />
                                 Edit
                               </DropdownMenuItem>
@@ -464,12 +529,14 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
           </div>
-
         </div>
       </SignedIn>
 
       {/* Create Document Dialog */}
-      <Dialog open={showCreateDialog} onOpenChange={(open) => !open && setShowCreateDialog(false)}>
+      <Dialog
+        open={showCreateDialog}
+        onOpenChange={(open) => !open && setShowCreateDialog(false)}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -534,7 +601,10 @@ export default function DashboardPage() {
       </Dialog>
 
       {/* Edit Document Dialog */}
-      <Dialog open={!!editingDoc} onOpenChange={(open) => !open && setEditingDoc(null)}>
+      <Dialog
+        open={!!editingDoc}
+        onOpenChange={(open) => !open && setEditingDoc(null)}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -599,7 +669,10 @@ export default function DashboardPage() {
       </Dialog>
 
       {/* Delete Document Dialog */}
-      <Dialog open={showDeleteDialog} onOpenChange={(open) => !open && setShowDeleteDialog(false)}>
+      <Dialog
+        open={showDeleteDialog}
+        onOpenChange={(open) => !open && setShowDeleteDialog(false)}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -607,7 +680,8 @@ export default function DashboardPage() {
               Delete Document
             </DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete this document? This action cannot be undone.
+              Are you sure you want to delete this document? This action cannot
+              be undone.
             </DialogDescription>
           </DialogHeader>
 
