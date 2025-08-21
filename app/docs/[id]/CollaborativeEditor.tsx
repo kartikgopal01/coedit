@@ -4,7 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { WebsocketProvider } from "y-websocket";
 import * as Y from "yjs";
-import { format } from "date-fns";
+import Quill from "quill";
+import { QuillBinding } from "y-quill";
+import "quill/dist/quill.snow.css";
 
 export default function CollaborativeEditor({ docId }: { docId: string }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -19,9 +21,6 @@ export default function CollaborativeEditor({ docId }: { docId: string }) {
     let binding: any = null;
 
     const setup = async () => {
-      const Quill = (await import("quill")).default;
-      const { QuillBinding } = await import("y-quill");
-
       const editorEl = document.createElement("div");
       if (!containerRef.current) return;
       containerRef.current.innerHTML = "";
@@ -82,10 +81,16 @@ export default function CollaborativeEditor({ docId }: { docId: string }) {
     const response = await fetch(`/api/documents/${docId}/snapshot`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ delta }),
     });
     if (!response.ok) {
-      console.error("Failed to save snapshot");
+      try {
+        const detail = await response.text();
+        console.error("Failed to save snapshot", response.status, detail);
+      } catch {
+        console.error("Failed to save snapshot", response.status);
+      }
       return;
     }
     const result = await response.json();

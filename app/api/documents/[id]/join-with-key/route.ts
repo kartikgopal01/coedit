@@ -3,15 +3,16 @@ import { adminDb } from "@/lib/firebase-admin";
 import { auth } from "@clerk/nextjs/server";
 import { FieldValue } from "firebase-admin/firestore";
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { key } = await request.json();
     if (!key) return NextResponse.json({ error: "Key required" }, { status: 400 });
 
-    const docRef = adminDb.collection("documents").doc(params.id);
+    const { id } = await params;
+    const docRef = adminDb.collection("documents").doc(id);
     const snap = await docRef.get();
     if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
 

@@ -5,15 +5,19 @@ import { s3Client, S3_BUCKET_NAME } from "@/lib/s3-client";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { v4 as uuidv4 } from "uuid";
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { delta } = await request.json();
     if (!delta) return NextResponse.json({ error: "Delta required" }, { status: 400 });
 
-    const docRef = adminDb.collection("documents").doc(params.id);
+    const { id } = await params;
+    const docRef = adminDb.collection("documents").doc(id);
     const docSnap = await docRef.get();
     if (!docSnap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -23,7 +27,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     const versionId = uuidv4();
     const timestamp = new Date().toISOString();
-    const s3Key = `snapshots/${params.id}/${timestamp}-${versionId}.json`;
+    const s3Key = `snapshots/${id}/${timestamp}-${versionId}.json`;
 
     // Upload JSON delta to S3
     const putCmd = new PutObjectCommand({

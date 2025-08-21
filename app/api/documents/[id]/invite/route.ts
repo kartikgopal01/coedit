@@ -2,15 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { auth } from "@clerk/nextjs/server";
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { email } = await request.json();
     if (!email) return NextResponse.json({ error: "Email required" }, { status: 400 });
 
-    const docRef = adminDb.collection("documents").doc(params.id);
+    const { id } = await params;
+    const docRef = adminDb.collection("documents").doc(id);
     const docSnap = await docRef.get();
     if (!docSnap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
 

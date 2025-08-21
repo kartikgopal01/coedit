@@ -10,7 +10,7 @@ export default function ShareAccess({ docId }: { docId: string }) {
 
   const generate = async () => {
     setStatus("");
-    const res = await fetch(`/api/documents/${docId}/share`, { method: "POST" });
+    const res = await fetch(`/api/documents/${docId}/share`, { method: "POST", credentials: "include" });
     if (!res.ok) {
       setStatus("Failed to generate share key");
       return;
@@ -26,6 +26,7 @@ export default function ShareAccess({ docId }: { docId: string }) {
       const res = await fetch(`/api/documents/${docId}/join-with-key`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ key }),
       });
       if (res.ok) setStatus("Joined via key");

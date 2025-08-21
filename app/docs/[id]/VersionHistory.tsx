@@ -33,6 +33,7 @@ export default function VersionHistory({ docId, onRollback }: { docId: string; o
     const res = await fetch("/api/download", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ fileKey: s3Key }),
     });
     if (!res.ok) return;

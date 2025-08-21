@@ -3,12 +3,13 @@ import { adminDb } from "@/lib/firebase-admin";
 import { auth } from "@clerk/nextjs/server";
 import { v4 as uuidv4 } from "uuid";
 
-export async function POST(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const docRef = adminDb.collection("documents").doc(params.id);
+    const { id } = await params;
+    const docRef = adminDb.collection("documents").doc(id);
     const snap = await docRef.get();
     if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
     const data = snap.data()!;

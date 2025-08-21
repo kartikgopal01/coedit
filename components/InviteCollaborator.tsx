@@ -14,6 +14,7 @@ export default function InviteCollaborator({ docId }: { docId: string }) {
       const res = await fetch(`/api/documents/${docId}/invite`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ email }),
       });
       if (!res.ok) throw new Error("Failed to invite");
@@ -32,6 +33,7 @@ export default function InviteCollaborator({ docId }: { docId: string }) {
     try {
       const res = await fetch(`/api/documents/${docId}/accept-invite`, {
         method: "POST",
+        credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to accept invite");
       setMessage("Invite accepted. You now have access.");
