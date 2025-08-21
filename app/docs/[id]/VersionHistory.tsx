@@ -14,6 +14,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface AnyVersionMeta {
   versionId: string;
@@ -40,6 +42,9 @@ export default function VersionHistory({
   const [reverting, setReverting] = useState<AnyVersionMeta | null>(null);
   const [revertMessage, setRevertMessage] = useState("");
   const [isReverting, setIsReverting] = useState(false);
+  const [diffOpen, setDiffOpen] = useState<AnyVersionMeta | null>(null);
+  const [diffLoading, setDiffLoading] = useState(false);
+  const [diffText, setDiffText] = useState("");
 
   useEffect(() => {
     const colRef = collection(db, "documents", docId, "versions");
@@ -71,6 +76,62 @@ export default function VersionHistory({
     const { downloadUrl } = await res.json();
     const delta = await fetch(downloadUrl).then((r) => r.json());
     onRollback(delta);
+  };
+
+  const openDiff = async (v: AnyVersionMeta) => {
+    setDiffOpen(v);
+    setDiffText("");
+    setDiffLoading(true);
+    try {
+      // Fetch current document text via latest version (if any) or empty
+      const current = versions[0];
+      const currentKey = current?.s3Key ?? current?.fileKey;
+      let currentDelta: any = null;
+      if (currentKey) {
+        const res = await fetch('/api/download', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ fileKey: currentKey }) });
+        if (res.ok) {
+          const { downloadUrl } = await res.json();
+          currentDelta = await fetch(downloadUrl).then(r => r.json());
+        }
+      }
+      const prevKey = v.s3Key ?? v.fileKey;
+      let prevDelta: any = null;
+      if (prevKey) {
+        const res = await fetch('/api/download', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ fileKey: prevKey }) });
+        if (res.ok) {
+          const { downloadUrl } = await res.json();
+          prevDelta = await fetch(downloadUrl).then(r => r.json());
+        }
+      }
+
+      const deltaToText = (d: any): string => {
+        try {
+          const ops = Array.isArray(d?.ops) ? d.ops : d;
+          if (!Array.isArray(ops)) return '';
+          return ops.map((o: any) => typeof o.insert === 'string' ? o.insert : ' ').join('');
+        } catch { return ''; }
+      };
+
+      const currentText = deltaToText(currentDelta);
+      const previousText = deltaToText(prevDelta);
+
+      const resp = await fetch('/api/ai/diff', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ currentText, previousText, meta: { versionId: v.versionId } })
+      });
+      if (!resp.ok) {
+        setDiffText('Failed to analyze differences.');
+      } else {
+        const { analysis } = await resp.json();
+        setDiffText(analysis || 'No analysis.');
+      }
+    } catch (e) {
+      setDiffText('Error analyzing differences.');
+    } finally {
+      setDiffLoading(false);
+    }
   };
 
   const openRevert = (v: AnyVersionMeta) => {
@@ -145,7 +206,7 @@ export default function VersionHistory({
             <div className="flex items-center gap-2">
               <Button
                 type="button"
-                onClick={() => handleRollback(v.fileKey ?? v.s3Key)}
+                onClick={() => openDiff(v)}
                 size="sm"
                 variant="outline"
               >
@@ -193,6 +254,30 @@ export default function VersionHistory({
             <Button onClick={confirmRevert} disabled={isReverting || !revertMessage.trim()}>
               {isReverting ? "Reverting..." : "Confirm Revert"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diff Analysis Dialog */}
+      <Dialog open={!!diffOpen} onOpenChange={(open) => !open && setDiffOpen(null)}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Changes since {diffOpen?.versionId.slice(0,8)}</DialogTitle>
+            <DialogDescription>
+              AI-generated explanation of differences between this version and current content.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="prose prose-sm dark:prose-invert max-w-none max-h-[60vh] overflow-auto">
+            {diffLoading ? (
+              <div className="bg-muted p-3 rounded text-sm">Analyzing…</div>
+            ) : (
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {diffText || 'No differences detected.'}
+              </ReactMarkdown>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDiffOpen(null)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

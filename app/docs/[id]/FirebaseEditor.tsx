@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { jsPDF } from "jspdf";
 
 type QuillType = typeof import("quill");
 
@@ -44,10 +45,21 @@ export default function FirebaseEditor({ docId }: { docId: string }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const quillRef = useRef<any>(null);
   const cursorsModuleRef = useRef<any>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const recognitionRef = useRef<any>(null);
+  const ttsUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const preferredVoiceRef = useRef<SpeechSynthesisVoice | null>(null);
+  const docRefRef = useRef<ReturnType<typeof doc> | null>(null);
   const [isReady, setIsReady] = useState(false);
   const [showCommitDialog, setShowCommitDialog] = useState(false);
   const [commitMessage, setCommitMessage] = useState("");
   const [isSavingSnapshot, setIsSavingSnapshot] = useState(false);
+  const [isSummarizing, setIsSummarizing] = useState(false);
+  const [showSummaryDialog, setShowSummaryDialog] = useState(false);
+  const [summaryText, setSummaryText] = useState("");
+  const [isListening, setIsListening] = useState(false);
+  const [interim, setInterim] = useState("");
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const savingTimer = useRef<number | null>(null);
   const isApplyingRemote = useRef(false);
   const { isSignedIn, userId } = useAuth();
@@ -94,6 +106,7 @@ export default function FirebaseEditor({ docId }: { docId: string }) {
 
       // Ensure base document exists
       const docRef = doc(db, "documents", docId);
+      docRefRef.current = docRef;
       const snap = await getDoc(docRef);
       if (!snap.exists()) {
         await setDoc(docRef, {
@@ -143,7 +156,13 @@ export default function FirebaseEditor({ docId }: { docId: string }) {
         try {
           const incoming = { ops: data.deltaOps };
           if (JSON.stringify(current?.ops) !== JSON.stringify(incoming.ops)) {
-            (quillRef.current as any)?.setContents(incoming);
+            const q = quillRef.current as any;
+            const sel = q.getSelection();
+            q.setContents(incoming);
+            if (sel) {
+              // Restore selection to avoid cursor jump to start
+              try { q.setSelection(sel.index, sel.length ?? 0, "silent"); } catch {}
+            }
           }
         } catch {}
       });
@@ -361,21 +380,272 @@ export default function FirebaseEditor({ docId }: { docId: string }) {
     }
   };
 
+  // AI: Summarize selected text or whole document
+  const handleSummarize = async () => {
+    try {
+      setIsSummarizing(true);
+      const q = quillRef.current as any;
+      const range = q.getSelection();
+      const text = range && range.length > 0 ? q.getText(range.index, range.length) : q.getText();
+      const res = await fetch('/api/ai/summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ text })
+      });
+      if (!res.ok) return;
+      const { summary } = await res.json();
+      setSummaryText(summary || "");
+      setShowSummaryDialog(true);
+    } catch (e) {
+      console.error('Summarize failed', e);
+    } finally {
+      setIsSummarizing(false);
+    }
+  };
+
+  // AI: Trigger audio file select and send to transcribe
+  const handleChooseAudio = () => {
+    if (!fileInputRef.current) return;
+    fileInputRef.current.value = '';
+    fileInputRef.current.click();
+  };
+
+  const handleAudioSelected: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
+    try {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/ai/transcribe', { method: 'POST', body: fd, credentials: 'include' });
+      if (!res.ok) return;
+      const { text } = await res.json();
+      const q = quillRef.current as any;
+      const range = q.getSelection();
+      const insertAt = range ? range.index : (q.getLength?.() ?? 0);
+      q.insertText(insertAt, `\n[Transcript]\n${text}\n`, 'silent');
+    } catch (err) {
+      console.error('Transcription failed', err);
+    }
+  };
+
+  // Live dictation using Web Speech API with visual animation and dynamic insertion
+  const startListening = () => {
+    try {
+      const SR: any = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SR) {
+        console.warn('SpeechRecognition not supported in this browser');
+        return;
+      }
+      const recog = new SR();
+      recognitionRef.current = recog;
+      recog.continuous = true;
+      recog.interimResults = true;
+      recog.lang = 'en-US';
+      setInterim("");
+      setIsListening(true);
+
+      const q = quillRef.current as any;
+      let anchorIndex = (q?.getSelection?.()?.index) ?? (q?.getLength?.() ?? 0);
+
+      recog.onresult = (event: any) => {
+        let interimText = "";
+        let finalText = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const res = event.results[i];
+          if (res.isFinal) finalText += res[0].transcript;
+          else interimText += res[0].transcript;
+        }
+        // Insert final text and keep interim as a lightweight preview
+        if (finalText && q) {
+          q.insertText(anchorIndex, finalText + " ", 'silent');
+          anchorIndex += (finalText + " ").length;
+          q.setSelection(anchorIndex, 0, 'silent');
+          // Persist to Firestore so collaborators receive updates
+          try {
+            const ref = docRefRef.current;
+            if (ref) {
+              const currentDelta = q.getContents();
+              isApplyingRemote.current = true;
+              void setDoc(ref, {
+                deltaOps: currentDelta.ops,
+                updatedAt: serverTimestamp(),
+              } as any, { merge: true });
+              setTimeout(() => { isApplyingRemote.current = false; }, 0);
+            }
+          } catch (e) {
+            console.error('Failed to sync dictated text:', e);
+          }
+        }
+        setInterim(interimText);
+      };
+
+      recog.onerror = () => { stopListening(); };
+      recog.onend = () => { setIsListening(false); setInterim(""); };
+      recog.start();
+    } catch (err) {
+      console.error('listen failed', err);
+    }
+  };
+
+  const stopListening = () => {
+    try { recognitionRef.current?.stop?.(); } catch {}
+    setIsListening(false);
+    setInterim("");
+  };
+
+  // Text-to-Speech (browser SpeechSynthesis)
+  // Pick a female-sounding voice when available
+  const pickFemaleVoice = (): SpeechSynthesisVoice | null => {
+    try {
+      const synth = window.speechSynthesis;
+      const voices = synth?.getVoices?.() || [];
+      const preferNames = [
+        'female', 'woman', 'Google UK English Female', 'Google US English',
+        'Samantha', 'Victoria', 'Karen', 'Tessa', 'Serena', 'Moira', 'Zira', 'Salli'
+      ];
+      const byName = voices.find(v => preferNames.some(n => v.name.toLowerCase().includes(n.toLowerCase())));
+      if (byName) return byName;
+      // fallback: first en-* voice
+      const byLang = voices.find(v => v.lang?.toLowerCase().startsWith('en'));
+      return byLang || voices[0] || null;
+    } catch { return null; }
+  };
+
+  // Warm up voices and remember preferred one
+  useEffect(() => {
+    const synth = typeof window !== 'undefined' ? window.speechSynthesis : null;
+    if (!synth) return;
+    const update = () => { preferredVoiceRef.current = pickFemaleVoice(); };
+    update();
+    synth.addEventListener?.('voiceschanged', update as any);
+    return () => { synth.removeEventListener?.('voiceschanged', update as any); };
+  }, []);
+
+  const startTTS = () => {
+    try {
+      const synth = window.speechSynthesis;
+      if (!synth) return;
+      const q = quillRef.current as any;
+      const range = q?.getSelection?.();
+      const text = range && range.length > 0 ? q.getText(range.index, range.length) : q.getText();
+      if (!text?.trim()) return;
+      const utt = new SpeechSynthesisUtterance(text);
+      const voice = preferredVoiceRef.current || pickFemaleVoice();
+      if (voice) utt.voice = voice;
+      utt.rate = 1.0;
+      utt.pitch = 1.1; // slightly brighter
+      utt.onend = () => { setIsSpeaking(false); ttsUtteranceRef.current = null; };
+      utt.onerror = () => { setIsSpeaking(false); ttsUtteranceRef.current = null; };
+      ttsUtteranceRef.current = utt;
+      synth.cancel();
+      synth.speak(utt);
+      setIsSpeaking(true);
+    } catch (e) {
+      console.error('TTS failed', e);
+    }
+  };
+
+  const stopTTS = () => {
+    try {
+      window.speechSynthesis?.cancel();
+    } catch {}
+    setIsSpeaking(false);
+    ttsUtteranceRef.current = null;
+  };
+
+  // Download current content as PDF
+  const handleDownloadPdf = () => {
+    try {
+      const q = quillRef.current as any;
+      const text = q?.getText?.() || "";
+      const doc = new jsPDF({ unit: "pt", format: "a4" });
+      const margin = 48;
+      const width = doc.internal.pageSize.getWidth() - margin * 2;
+      const height = doc.internal.pageSize.getHeight();
+      const lines = doc.splitTextToSize(text, width);
+      let y = margin;
+      const lineHeight = 16;
+      lines.forEach((line: string) => {
+        if (y > height - margin) {
+          doc.addPage();
+          y = margin;
+        }
+        doc.text(line, margin, y);
+        y += lineHeight;
+      });
+      doc.save(`document-${new Date().toISOString().slice(0, 10)}.pdf`);
+    } catch (e) {
+      console.error("PDF export failed", e);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <div className="text-sm text-gray-500">
           {isReady ? "Connected (Firebase)" : "Connecting..."}
         </div>
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="outline" onClick={handleSummarize} disabled={!isReady || isSummarizing}>{isSummarizing ? 'Summarizing…' : 'Summarize'}</Button>
+          {!isListening ? (
+            <Button type="button" variant="outline" onClick={startListening} disabled={!isReady}>Dictate</Button>
+          ) : (
+            <Button type="button" variant="destructive" onClick={stopListening}>Stop</Button>
+          )}
+          {!isSpeaking ? (
+            <Button type="button" variant="outline" onClick={startTTS} disabled={!isReady}>Read</Button>
+          ) : (
+            <Button type="button" variant="destructive" onClick={stopTTS}>Stop TTS</Button>
+          )}
+          <Button type="button" variant="outline" onClick={handleDownloadPdf} disabled={!isReady}>Download PDF</Button>
         <Button
           type="button"
           onClick={handleSaveSnapshot}
-          disabled={!isReady || isSavingSnapshot}
+            disabled={!isReady || isSavingSnapshot}
         >
-          {isSavingSnapshot ? "Saving..." : "Save Snapshot"}
+            {isSavingSnapshot ? "Saving..." : "Save Snapshot"}
         </Button>
+        </div>
       </div>
+      <div className="relative">
       <div ref={containerRef} className="min-h-[400px]" />
+        {isListening && (
+          <div className="absolute top-2 right-2 flex items-center gap-2 bg-background/70 backdrop-blur border rounded px-3 py-2">
+            <div className="relative h-3 w-3">
+              <span className="absolute inset-0 rounded-full bg-red-500 animate-ping opacity-60" />
+              <span className="absolute inset-0 rounded-full bg-red-500" />
+            </div>
+            <span className="text-xs text-muted-foreground">Listening… {interim && <em className="opacity-70">{interim}</em>}</span>
+          </div>
+        )}
+      </div>
+      <input ref={fileInputRef} type="file" accept="audio/*" onChange={handleAudioSelected} className="hidden" />
+
+      {/* Summary Dialog */}
+      <Dialog open={showSummaryDialog} onOpenChange={setShowSummaryDialog}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Summary</DialogTitle>
+            <DialogDescription>
+              Generated by AI. You can insert it into the document.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="bg-muted p-3 rounded text-sm whitespace-pre-wrap max-h-72 overflow-auto">{summaryText || 'No summary.'}</div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSummaryDialog(false)}>Close</Button>
+            <Button onClick={() => {
+              try {
+                const q = quillRef.current as any;
+                const range = q.getSelection();
+                const insertAt = range ? range.index + range.length : (q.getLength?.() ?? 0);
+                q.insertText(insertAt, `\nSummary:\n${summaryText}\n`, 'silent');
+              } catch {}
+              setShowSummaryDialog(false);
+            }}>Insert into editor</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Commit Message Dialog */}
       <Dialog open={showCommitDialog} onOpenChange={setShowCommitDialog}>
