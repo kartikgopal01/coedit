@@ -4,15 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { WebsocketProvider } from "y-websocket";
 import * as Y from "yjs";
-import Quill from "quill";
-import { QuillBinding } from "y-quill";
 import "quill/dist/quill.snow.css";
 
 export default function CollaborativeEditor({ docId }: { docId: string }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const quillRef = useRef<any>(null);
   const [isReady, setIsReady] = useState(false);
-  const { isSignedIn } = useAuth();
+  const { isSignedIn, userId } = useAuth();
 
   useEffect(() => {
     if (!isSignedIn) return;
@@ -21,6 +19,21 @@ export default function CollaborativeEditor({ docId }: { docId: string }) {
     let binding: any = null;
 
     const setup = async () => {
+      if (typeof window === "undefined") return;
+
+      const [{ default: Quill }, { QuillBinding }] = await Promise.all([
+        import("quill"),
+        import("y-quill"),
+      ]);
+      // Try to load cursors module for live presence
+      try {
+        const { default: QuillCursors } = await import("quill-cursors");
+        // @ts-ignore register module for Quill
+        Quill.register("modules/cursors", QuillCursors);
+      } catch (err) {
+        console.warn("quill-cursors not available", err);
+      }
+
       const editorEl = document.createElement("div");
       if (!containerRef.current) return;
       containerRef.current.innerHTML = "";
@@ -29,6 +42,8 @@ export default function CollaborativeEditor({ docId }: { docId: string }) {
       const quill = new Quill(editorEl, {
         theme: "snow",
         modules: {
+          // Live cursors (if quill-cursors is registered above)
+          cursors: true,
           toolbar: [
             [{ header: [1, 2, 3, false] }],
             ["bold", "italic", "underline", "strike"],
@@ -48,6 +63,14 @@ export default function CollaborativeEditor({ docId }: { docId: string }) {
       const ytext = ydoc.getText("quill");
 
       binding = new QuillBinding(ytext, quill, provider.awareness);
+
+      // Set awareness user info for better cursor labels/colors
+      try {
+        provider.awareness.setLocalStateField("user", {
+          name: userId ?? "anonymous",
+          color: `hsl(${Math.abs((userId ?? "anon").split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % 360}, 70%, 50%)`,
+        });
+      } catch {}
 
       quillRef.current = quill;
       setIsReady(true);

@@ -2,7 +2,10 @@
 
 import { useParams } from "next/navigation";
 import { useCallback } from "react";
-import CollaborativeEditor from "./CollaborativeEditor";
+import dynamic from "next/dynamic";
+const CollaborativeEditor = dynamic(() => import("./FirebaseEditor"), {
+  ssr: false,
+});
 import VersionHistory from "./VersionHistory";
 import InviteCollaborator from "@/components/InviteCollaborator";
 import ShareAccess from "@/components/ShareAccess";
