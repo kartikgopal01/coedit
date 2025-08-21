@@ -48,4 +48,5 @@ firebase-service-account*.json
 service*.json
 *.service-account.json
 firebase-service-account*.json
+.clerk
 
