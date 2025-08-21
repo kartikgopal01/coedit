@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import { useAuth } from "@clerk/nextjs";
+import { useState } from "react";
 
 interface FileUploadProps {
   onUploadComplete?: (fileKey: string, fileName: string) => void;
@@ -86,7 +86,7 @@ export default function FileUpload({
           disabled={isUploading}
           className="hidden"
           id="file-upload"
-          accept=".txt,.md,.json,.pdf,.png,.jpg,.jpeg,.gif,.webp"
+          accept=".txt,.md,.json,.pdf,.rtf,.doc,.docx,.png,.jpg,.jpeg,.gif,.webp,.svg,.csv,.xml"
         />
         <label htmlFor="file-upload" className="cursor-pointer block">
           {isUploading ? (
@@ -106,7 +106,7 @@ export default function FileUpload({
                 Click to select a file or drag and drop
               </div>
               <div className="text-xs text-gray-400">
-                Max size: 10MB | Supported: TXT, MD, JSON, PDF, Images
+                Max size: 10MB | Supported: Documents (TXT, MD, JSON, PDF, RTF, DOC, DOCX), Images (PNG, JPG, GIF, WebP, SVG), Data (CSV, XML)
               </div>
             </div>
           )}

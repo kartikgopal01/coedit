@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { signInWithCustomToken, signOut } from "firebase/auth";
+import { useEffect } from "react";
 import { auth } from "@/lib/firebase-client";
 
 export default function FirebaseAuthSync() {
@@ -22,7 +22,7 @@ export default function FirebaseAuthSync() {
           });
 
           if (!response.ok) {
-            let details: unknown = undefined;
+            let details: unknown;
             try {
               details = await response.json();
             } catch (_) {
@@ -30,7 +30,10 @@ export default function FirebaseAuthSync() {
             }
             // Surface more context to help diagnose setup issues
             // eslint-disable-next-line no-console
-            console.error("Failed to get custom token - server response:", details);
+            console.error(
+              "Failed to get custom token - server response:",
+              details,
+            );
             throw new Error("Failed to get custom token");
           }
 

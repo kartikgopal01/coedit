@@ -3,11 +3,13 @@
   "Statement": [
     {
       "Effect": "Allow",
-      "Action": ["s3:GetObject","s3:PutObject","s3:DeleteObject","s3:ListBucket"],
-      "Resource": [
-        "arn:aws:s3:::coedit-codeit",
-        "arn:aws:s3:::coedit-codeit/*"
-      ]
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:ListBucket"
+      ],
+      "Resource": ["arn:aws:s3:::coedit-codeit", "arn:aws:s3:::coedit-codeit/*"]
     }
   ]
 }

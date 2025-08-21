@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
+import { useEffect, useRef, useState } from "react";
 import { WebsocketProvider } from "y-websocket";
 import * as Y from "yjs";
 import "quill/dist/quill.snow.css";
+import { Button } from "@/components/ui/button";
 
 export default function CollaborativeEditor({ docId }: { docId: string }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -28,7 +29,6 @@ export default function CollaborativeEditor({ docId }: { docId: string }) {
       // Try to load cursors module for live presence
       try {
         const { default: QuillCursors } = await import("quill-cursors");
-        // @ts-ignore register module for Quill
         Quill.register("modules/cursors", QuillCursors);
       } catch (err) {
         console.warn("quill-cursors not available", err);
@@ -72,20 +72,23 @@ export default function CollaborativeEditor({ docId }: { docId: string }) {
         });
       } catch {}
 
-      quillRef.current = quill;
+      quillRef.current = quill as any;
       setIsReady(true);
 
       const onApplyDelta = (e: Event) => {
         const custom = e as CustomEvent;
         const delta = custom.detail?.delta;
-        if (delta) {
-          quill.setContents(delta);
+        if (delta && quillRef.current) {
+          quillRef.current.setContents(delta);
         }
       };
       window.addEventListener("apply-delta", onApplyDelta as EventListener);
 
       return () => {
-        window.removeEventListener("apply-delta", onApplyDelta as EventListener);
+        window.removeEventListener(
+          "apply-delta",
+          onApplyDelta as EventListener,
+        );
         binding?.destroy?.();
         provider?.destroy();
         ydoc?.destroy();
@@ -96,11 +99,11 @@ export default function CollaborativeEditor({ docId }: { docId: string }) {
     return () => {
       void cleanupPromise;
     };
-  }, [docId, isSignedIn]);
+  }, [docId, isSignedIn, userId]);
 
   const handleSaveSnapshot = async () => {
     if (!quillRef.current) return;
-    const delta = quillRef.current.getContents();
+    const delta = (quillRef.current as any).getContents();
     const response = await fetch(`/api/documents/${docId}/snapshot`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -126,12 +129,12 @@ export default function CollaborativeEditor({ docId }: { docId: string }) {
         <div className="text-sm text-gray-500">
           {isReady ? "Connected" : "Connecting..."}
         </div>
-        <button
+        <Button
+          type="button"
           onClick={handleSaveSnapshot}
-          className="bg-blue-600 text-white px-3 py-1 rounded"
         >
           Save Snapshot
-        </button>
+        </Button>
       </div>
       <div ref={containerRef} className="min-h-[400px]" />
     </div>

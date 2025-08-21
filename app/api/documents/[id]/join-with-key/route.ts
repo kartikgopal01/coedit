@@ -1,20 +1,26 @@
-import { NextRequest, NextResponse } from "next/server";
-import { adminDb } from "@/lib/firebase-admin";
 import { auth } from "@clerk/nextjs/server";
 import { FieldValue } from "firebase-admin/firestore";
+import { type NextRequest, NextResponse } from "next/server";
+import { adminDb } from "@/lib/firebase-admin";
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   try {
     const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!userId)
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { key } = await request.json();
-    if (!key) return NextResponse.json({ error: "Key required" }, { status: 400 });
+    if (!key)
+      return NextResponse.json({ error: "Key required" }, { status: 400 });
 
     const { id } = await params;
     const docRef = adminDb.collection("documents").doc(id);
     const snap = await docRef.get();
-    if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!snap.exists)
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const data = snap.data()!;
     if (!data.shareKey || data.shareKey !== key) {

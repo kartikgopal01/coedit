@@ -1,18 +1,19 @@
 "use client";
 
+import { format } from "date-fns";
+import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { db } from "@/lib/firebase-client";
-import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
-import { format } from "date-fns";
+import type { VersionMeta } from "@/lib/firestore-types";
+import { Button } from "@/components/ui/button";
 
-interface VersionMeta {
-  versionId: string;
-  timestamp: string;
-  createdBy: string;
-  s3Key: string;
-}
-
-export default function VersionHistory({ docId, onRollback }: { docId: string; onRollback: (delta: any) => void }) {
+export default function VersionHistory({
+  docId,
+  onRollback,
+}: {
+  docId: string;
+  onRollback: (delta: unknown) => void;
+}) {
   const [versions, setVersions] = useState<VersionMeta[]>([]);
 
   useEffect(() => {
@@ -22,19 +23,21 @@ export default function VersionHistory({ docId, onRollback }: { docId: string; o
     );
     const unsub = onSnapshot(q, (snap) => {
       const items: VersionMeta[] = [];
-      snap.forEach((d) => items.push(d.data() as VersionMeta));
+      snap.docs.forEach((d) => {
+        items.push(d.data() as VersionMeta);
+      });
       setVersions(items);
     });
     return () => unsub();
   }, [docId]);
 
-  const handleRollback = async (s3Key: string) => {
+  const handleRollback = async (fileKey: string) => {
     // Get presigned URL and fetch delta
     const res = await fetch("/api/download", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ fileKey: s3Key }),
+      body: JSON.stringify({ fileKey }),
     });
     if (!res.ok) return;
     const { downloadUrl } = await res.json();
@@ -47,17 +50,24 @@ export default function VersionHistory({ docId, onRollback }: { docId: string; o
       <h3 className="font-semibold">Version History</h3>
       <ul className="space-y-2">
         {versions.map((v) => (
-          <li key={v.versionId} className="flex items-center justify-between border p-2 rounded">
+          <li
+            key={v.versionId}
+            className="flex items-center justify-between border p-2 rounded"
+          >
             <div className="text-sm">
               <div>Version: {v.versionId.slice(0, 8)}</div>
-              <div className="text-gray-500 text-xs">{format(new Date(v.timestamp), "PPpp")}</div>
+              <div className="text-gray-500 text-xs">
+                {format(v.createdAt.toDate(), "PPpp")}
+              </div>
             </div>
-            <button
-              onClick={() => handleRollback(v.s3Key)}
-              className="text-sm bg-gray-800 text-white px-2 py-1 rounded"
+            <Button
+              type="button"
+              onClick={() => handleRollback(v.fileKey)}
+              size="sm"
+              variant="destructive"
             >
               Rollback
-            </button>
+            </Button>
           </li>
         ))}
       </ul>

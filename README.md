@@ -28,6 +28,7 @@ SyncScribe is your single source of truth. Multiple users edit the same doc in r
   - **Rollback:** Instantly revert to any previous commit.
 - **Scalable File Storage:** Content and snapshots stored securely in AWS S3—no free-tier limits.
 - **Modern & Responsive UI:** Built with Shadcn/UI and Tailwind CSS for a clean, intuitive experience.
+- **Robust Routing:** Proper error handling, loading states, and navigation with fallbacks.
 
 ---
 

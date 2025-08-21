@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { RiLoader4Line } from "@remixicon/react";
 
 export default function InviteCollaborator({ docId }: { docId: string }) {
   const [email, setEmail] = useState("");
@@ -8,6 +11,8 @@ export default function InviteCollaborator({ docId }: { docId: string }) {
   const [message, setMessage] = useState("");
 
   const invite = async () => {
+    if (!email.trim()) return;
+
     setLoading(true);
     setMessage("");
     try {
@@ -18,50 +23,48 @@ export default function InviteCollaborator({ docId }: { docId: string }) {
         body: JSON.stringify({ email }),
       });
       if (!res.ok) throw new Error("Failed to invite");
-      setMessage("Invitation sent");
+      setMessage("Invitation sent successfully!");
       setEmail("");
-    } catch (e) {
-      setMessage("Error sending invite");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const accept = async () => {
-    setLoading(true);
-    setMessage("");
-    try {
-      const res = await fetch(`/api/documents/${docId}/accept-invite`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to accept invite");
-      setMessage("Invite accepted. You now have access.");
-    } catch (e) {
-      setMessage("No pending invite found");
+    } catch (_e) {
+      setMessage("Error sending invite. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="space-y-2">
-      <h3 className="font-semibold">Collaborators</h3>
+    <div className="space-y-3">
+      <h3 className="font-semibold text-base">Invite Collaborators</h3>
       <div className="flex gap-2">
-        <input
+        <Input
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="email@example.com"
-          className="border px-2 py-1 rounded w-full"
+          className="flex-1"
+          onKeyPress={(e) => {
+            if (e.key === 'Enter') {
+              invite();
+            }
+          }}
         />
-        <button onClick={invite} disabled={loading} className="bg-blue-600 text-white px-3 py-1 rounded">
-          Invite
-        </button>
+        <Button
+          type="button"
+          onClick={invite}
+          disabled={loading || !email.trim()}
+          size="sm"
+        >
+          {loading ? (
+            <RiLoader4Line className="h-3 w-3 animate-spin" />
+          ) : (
+            "Invite"
+          )}
+        </Button>
       </div>
-      <button onClick={accept} disabled={loading} className="text-sm underline">
-        Accept my invite
-      </button>
-      {message && <div className="text-sm text-gray-600">{message}</div>}
+      {message && (
+        <div className={`text-sm ${message.includes('Error') ? 'text-destructive' : 'text-green-600'}`}>
+          {message}
+        </div>
+      )}
     </div>
   );
 }

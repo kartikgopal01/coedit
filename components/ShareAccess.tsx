@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 
 export default function ShareAccess({ docId }: { docId: string }) {
   const [shareKey, setShareKey] = useState<string | null>(null);
@@ -10,7 +11,10 @@ export default function ShareAccess({ docId }: { docId: string }) {
 
   const generate = async () => {
     setStatus("");
-    const res = await fetch(`/api/documents/${docId}/share`, { method: "POST", credentials: "include" });
+    const res = await fetch(`/api/documents/${docId}/share`, {
+      method: "POST",
+      credentials: "include",
+    });
     if (!res.ok) {
       setStatus("Failed to generate share key");
       return;
@@ -35,12 +39,19 @@ export default function ShareAccess({ docId }: { docId: string }) {
     void join();
   }, [docId, sp]);
 
-  const shareUrl = shareKey ? `${window.location.origin}/docs/${docId}?key=${shareKey}` : "";
+  const shareUrl = shareKey
+    ? `${window.location.origin}/docs/${docId}?key=${shareKey}`
+    : "";
 
   return (
     <div className="space-y-2">
       <h3 className="font-semibold">Share Access</h3>
-      <button onClick={generate} className="bg-gray-800 text-white px-3 py-1 rounded">Generate Share Link</button>
+      <Button
+        type="button"
+        onClick={generate}
+      >
+        Generate Share Link
+      </Button>
       {shareKey && (
         <div className="text-sm">
           <div className="break-all">{shareUrl}</div>
