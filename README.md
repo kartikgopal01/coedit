@@ -1,4 +1,4 @@
-# 📝 CoEdit: Real-Time Docs with Git Superpowers
+# CoEdit: Real-Time Docs with Git Superpowers
 
 A real-time collaborative document platform built in 24 hours. SyncScribe combines the seamless editing of Google Docs with robust, Git-like version control—so teams can edit, commit, and roll back changes effortlessly.
 
