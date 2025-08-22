@@ -150,133 +150,139 @@ export default function Header() {
   }, [isMobileMenuOpen, closeMobileMenu]);
 
   return (
-    <header className="flex justify-between items-center p-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
-      <Link
-        href="/"
-        className="text-xl font-bold hover:text-primary transition-colors"
-      >
-        <img src="/logo.svg" alt="CoEdit" className="w-10 h-10 dark:hidden" />
-        <img
-          src="/logowhite.svg"
-          alt="CoEdit"
-          className="w-10 h-10 hidden dark:block"
-        />
-      </Link>
+    <header className="flex justify-center px-8 py-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
+      <div className="container flex justify-between items-center">
+        <Link
+          href="/"
+          className="text-xl font-bold hover:text-primary transition-colors"
+        >
+          <img src="/logo.svg" alt="CoEdit" className="w-12 h-12 dark:hidden" />
+          <img
+            src="/logowhite.svg"
+            alt="CoEdit"
+            className="w-12 h-12 hidden dark:block"
+          />
+        </Link>
 
-      {/* Desktop Navigation */}
-      <div className="hidden md:flex gap-2 items-center">
-        <ThemeToggle />
-        <SignedOut>
-          <SignInButton mode="modal">
-            <Button variant="outline">Sign In</Button>
-          </SignInButton>
-          <SignUpButton mode="modal">
-            <Button>Sign Up</Button>
-          </SignUpButton>
-        </SignedOut>
-        <SignedIn>
-          {(pathname === "/dashboard" || pathname.startsWith("/docs/")) && (
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="relative h-9 w-9 p-0"
-                >
-                  <RiMailLine className="h-4 w-4" />
-                  {invites.length > 0 && (
-                    <Badge
-                      variant="destructive"
-                      className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 text-xs"
-                    >
-                      {invites.length}
-                    </Badge>
-                  )}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-80" align="end">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-medium">Pending Invites</h4>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={fetchPendingInvites}
-                      disabled={loading}
-                      className="h-6 w-6 p-0"
-                    >
-                      <RiLoader4Line
-                        className={`h-3 w-3 ${loading ? "animate-spin" : ""}`}
-                      />
-                    </Button>
+        {/* Desktop Navigation */}
+        <div className="hidden md:flex gap-2 items-center">
+          <ThemeToggle />
+          <SignedOut>
+            <SignInButton mode="modal">
+              <Button variant="outline">Sign In</Button>
+            </SignInButton>
+            <SignUpButton mode="modal">
+              <Button>Sign Up</Button>
+            </SignUpButton>
+          </SignedOut>
+          <SignedIn>
+            {(pathname === "/dashboard" || pathname.startsWith("/docs/")) && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="relative h-9 w-9 p-0"
+                  >
+                    <RiMailLine className="h-4 w-4" />
+                    {invites.length > 0 && (
+                      <Badge
+                        variant="destructive"
+                        className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 text-xs"
+                      >
+                        {invites.length}
+                      </Badge>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80" align="end">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-medium">Pending Invites</h4>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={fetchPendingInvites}
+                        disabled={loading}
+                        className="h-6 w-6 p-0"
+                      >
+                        <RiLoader4Line
+                          className={`h-3 w-3 ${loading ? "animate-spin" : ""}`}
+                        />
+                      </Button>
+                    </div>
+                    {loading ? (
+                      <div className="flex items-center justify-center py-4">
+                        <RiLoader4Line className="h-4 w-4 animate-spin" />
+                      </div>
+                    ) : invites.length === 0 ? (
+                      <div className="text-center py-4 text-sm text-muted-foreground">
+                        No pending invites
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {invites.map((invite) => (
+                          <div
+                            key={invite.documentId}
+                            className="flex items-center justify-between p-3 border rounded-lg bg-muted/30"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <h5 className="font-medium text-sm truncate">
+                                {invite.documentTitle}
+                              </h5>
+                              <p className="text-xs text-muted-foreground">
+                                {formatMaybeTimestamp(invite.invite.createdAt)}
+                              </p>
+                            </div>
+                            <div className="flex gap-1 ml-2">
+                              <Button
+                                size="sm"
+                                onClick={() =>
+                                  handleAcceptInvite(invite.documentId)
+                                }
+                                disabled={
+                                  processingInvite === invite.documentId
+                                }
+                                className="h-6 w-6 p-0 bg-green-600 hover:bg-green-700"
+                              >
+                                {processingInvite === invite.documentId ? (
+                                  <RiLoader4Line className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <RiCheckLine className="h-3 w-3" />
+                                )}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() =>
+                                  handleRejectInvite(invite.documentId)
+                                }
+                                disabled={
+                                  processingInvite === invite.documentId
+                                }
+                                className="h-6 w-6 p-0"
+                              >
+                                {processingInvite === invite.documentId ? (
+                                  <RiLoader4Line className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <RiXLine className="h-3 w-3" />
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  {loading ? (
-                    <div className="flex items-center justify-center py-4">
-                      <RiLoader4Line className="h-4 w-4 animate-spin" />
-                    </div>
-                  ) : invites.length === 0 ? (
-                    <div className="text-center py-4 text-sm text-muted-foreground">
-                      No pending invites
-                    </div>
-                  ) : (
-                    <div className="space-y-2 max-h-60 overflow-y-auto">
-                      {invites.map((invite) => (
-                        <div
-                          key={invite.documentId}
-                          className="flex items-center justify-between p-3 border rounded-lg bg-muted/30"
-                        >
-                          <div className="flex-1 min-w-0">
-                            <h5 className="font-medium text-sm truncate">
-                              {invite.documentTitle}
-                            </h5>
-                            <p className="text-xs text-muted-foreground">
-                              {formatMaybeTimestamp(invite.invite.createdAt)}
-                            </p>
-                          </div>
-                          <div className="flex gap-1 ml-2">
-                            <Button
-                              size="sm"
-                              onClick={() =>
-                                handleAcceptInvite(invite.documentId)
-                              }
-                              disabled={processingInvite === invite.documentId}
-                              className="h-6 w-6 p-0 bg-green-600 hover:bg-green-700"
-                            >
-                              {processingInvite === invite.documentId ? (
-                                <RiLoader4Line className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <RiCheckLine className="h-3 w-3" />
-                              )}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() =>
-                                handleRejectInvite(invite.documentId)
-                              }
-                              disabled={processingInvite === invite.documentId}
-                              className="h-6 w-6 p-0"
-                            >
-                              {processingInvite === invite.documentId ? (
-                                <RiLoader4Line className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <RiXLine className="h-3 w-3" />
-                              )}
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </PopoverContent>
-            </Popover>
-          )}
-          <Button variant="ghost" asChild>
-            <Link href="/dashboard">Dashboard</Link>
-          </Button>
-          <UserButton />
-        </SignedIn>
+                </PopoverContent>
+              </Popover>
+            )}
+            <Button variant="ghost" asChild>
+              <Link href="/dashboard">Dashboard</Link>
+            </Button>
+            <UserButton />
+          </SignedIn>
+        </div>
       </div>
 
       {/* Mobile Menu Button */}

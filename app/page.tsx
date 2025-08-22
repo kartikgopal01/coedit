@@ -1,3 +1,5 @@
+"use client";
+
 import {
   RiArrowRightLine,
   RiFileTextLine,
@@ -7,8 +9,6 @@ import {
   RiShieldCheckLine,
   RiTeamLine,
   RiMagicLine,
-  RiVolumeUpLine,
-  RiDownloadLine,
   RiUserLine,
 } from "@remixicon/react";
 import Link from "next/link";
@@ -16,25 +16,56 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
-  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { motion } from "framer-motion";
+import { FlipWords } from "@/components/ui/flip-words";
 
 export default function LandingPage() {
   return (
     <div className="bg-gradient-to-br from-background via-background to-muted/20">
       {/* Hero Section */}
       <section className="min-h-screen relative overflow-hidden">
+        {/* Hero Icons */}
+        <div className="mt-12 flex gap-8 justify-center">
+          <motion.div
+            initial={{ opacity: 0, y: 150 }}
+            animate={{ opacity: 1, y: 50 }}
+            transition={{
+              duration: 0.8,
+              ease: "easeOut",
+              delay: 0.2,
+            }}
+            className="relative"
+          >
+            <img
+              src="/logo.svg"
+              alt="CoEdit Logo"
+              className="w-40 h-40 dark:hidden opacity-80 hover:opacity-100 transition-opacity duration-300"
+            />
+            <img
+              src="/logowhite.svg"
+              alt="CoEdit Logo"
+              className="w-40 h-40 hidden dark:block opacity-80 hover:opacity-100 transition-opacity duration-300"
+            />
+          </motion.div>
+        </div>
+
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-16">
           <div className="text-center">
             <Badge variant="secondary" className="mb-4">
               <RiFlashlightLine className="w-3 h-3 mr-1" />
               Real-time collaboration
             </Badge>
+
             <h1 className="text-4xl md:text-6xl font-bold tracking-tight mb-6">
-              Collaborative Docs with
+              Co
+              <FlipWords
+                words={["Edit", "Create", "Collaborate", "Innovate"]}
+              />{" "}
+              Docs with
               <span className="text-primary block">Git Superpowers</span>
             </h1>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto mb-8">
