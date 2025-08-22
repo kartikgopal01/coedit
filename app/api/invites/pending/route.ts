@@ -37,9 +37,31 @@ export async function GET(request: NextRequest) {
       let isExpired = false;
       if (invite.expiresAt) {
         try {
-          const expiresDate = typeof invite.expiresAt.toDate === 'function' 
-            ? invite.expiresAt.toDate() 
-            : new Date(invite.expiresAt);
+          let expiresDate: Date;
+          
+          // Handle Firestore Timestamp
+          if (typeof invite.expiresAt.toDate === 'function') {
+            expiresDate = invite.expiresAt.toDate();
+          } 
+          // Handle Firestore Timestamp with seconds property
+          else if (invite.expiresAt.seconds) {
+            expiresDate = new Date(invite.expiresAt.seconds * 1000);
+          }
+          // Handle string or number
+          else if (typeof invite.expiresAt === 'string' || typeof invite.expiresAt === 'number') {
+            expiresDate = new Date(invite.expiresAt);
+          }
+          // Handle Date object
+          else if (invite.expiresAt instanceof Date) {
+            expiresDate = invite.expiresAt;
+          }
+          // Fallback - treat as not expired
+          else {
+            console.warn("Unknown expiresAt format:", invite.expiresAt);
+            isExpired = false;
+            return;
+          }
+          
           isExpired = expiresDate < now;
         } catch (error) {
           console.error("Error parsing expiresAt:", error);

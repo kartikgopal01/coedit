@@ -1,5 +1,7 @@
 # CoEdit — Real‑Time Collaborative Docs with Version Control
 
+Live Deployment - [coedit.vercel.app](https://coedit-uudn.vercel.app/)
+
 CoEdit is a real‑time collaborative document platform with built‑in version control. Teams can edit together, save snapshots with commit messages, browse version history, analyze diffs with AI, and roll back instantly. It’s Google‑Docs‑style collaboration with Git‑like superpowers.
 
 ---
