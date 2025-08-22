@@ -164,7 +164,7 @@ export default function DocumentSidebar({ docId, onRollback }: DocumentSidebarPr
 
   if (isCollapsed) {
     return (
-      <div className="fixed right-0 top-1/2 transform -translate-y-1/2 z-40">
+      <div className="fixed right-0 top-1/2 transform -translate-y-1/2 z-40 md:top-16 md:-translate-y-0">
         <Button
           variant="outline"
           size="sm"
@@ -187,7 +187,7 @@ export default function DocumentSidebar({ docId, onRollback }: DocumentSidebarPr
         onClick={() => setIsCollapsed(true)}
       />
       <div
-        className="fixed right-0 top-16 h-full w-[40rem] bg-background border-l border-border shadow-lg z-40 flex flex-col select-none"
+        className="fixed right-0 top-16 h-[calc(100%-4rem)] w-full sm:w-[28rem] md:w-[32rem] lg:w-[36rem] xl:w-[40rem] bg-background border-l border-border shadow-lg z-40 flex flex-col select-none"
       >
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b">
@@ -202,7 +202,7 @@ export default function DocumentSidebar({ docId, onRollback }: DocumentSidebarPr
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex border-b">
+      <div className="flex flex-wrap border-b">
         {tabs.map((tab) => (
           <Button
             key={tab.id}

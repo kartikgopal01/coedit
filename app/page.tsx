@@ -183,7 +183,16 @@ export default function LandingPage() {
       <footer className="border-t bg-muted/30 py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col items-center gap-2 justify-center">
-            <img src="/logo.svg" alt="CoEdit" className="w-10 h-10" />
+            <img
+              src="/logo.svg"
+              alt="CoEdit"
+              className="w-10 h-10 dark:hidden"
+            />
+            <img
+              src="/logowhite.svg"
+              alt="CoEdit"
+              className="w-10 h-10 hidden dark:block"
+            />
             <p className="text-muted-foreground mb-4">
               Real-time collaborative documents with version control
             </p>
