@@ -13,6 +13,7 @@ import {
   RiMailLine,
   RiCheckLine,
   RiCloseLine as RiXLine,
+  RiRefreshLine,
   RiLoader4Line,
 } from "@remixicon/react";
 import Link from "next/link";
@@ -206,14 +207,14 @@ export default function Header() {
                         disabled={loading}
                         className="h-6 w-6 p-0"
                       >
-                        <RiLoader4Line
+                        <RiRefreshLine
                           className={`h-3 w-3 ${loading ? "animate-spin" : ""}`}
                         />
                       </Button>
                     </div>
                     {loading ? (
                       <div className="flex items-center justify-center py-4">
-                        <RiLoader4Line className="h-4 w-4 animate-spin" />
+                        <RiRefreshLine className="h-4 w-4 animate-spin" />
                       </div>
                     ) : invites.length === 0 ? (
                       <div className="text-center py-4 text-sm text-muted-foreground">

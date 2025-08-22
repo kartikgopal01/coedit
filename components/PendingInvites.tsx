@@ -14,10 +14,12 @@ interface PendingInvite {
   invite: InviteData;
 }
 
+type ProcessingAction = 'accept' | 'reject';
+
 export default function PendingInvites() {
   const [invites, setInvites] = useState<PendingInvite[]>([]);
   const [loading, setLoading] = useState(true);
-  const [processingInvite, setProcessingInvite] = useState<string | null>(null);
+  const [processingInvites, setProcessingInvites] = useState<Map<string, ProcessingAction>>(new Map());
 
   const fetchPendingInvites = useCallback(async () => {
     try {
@@ -27,6 +29,8 @@ export default function PendingInvites() {
       if (response.ok) {
         const data = await response.json();
         setInvites(data.invites || []);
+      } else {
+        console.error("Failed to fetch pending invites:", response.status);
       }
     } catch (error) {
       console.error("Error fetching pending invites:", error);
@@ -45,38 +49,62 @@ export default function PendingInvites() {
   }, [fetchPendingInvites]);
 
   const handleAcceptInvite = async (documentId: string) => {
-    setProcessingInvite(documentId);
+    // Prevent multiple clicks on the same invite
+    if (processingInvites.has(documentId)) return;
+    
+    setProcessingInvites(prev => new Map(prev).set(documentId, 'accept'));
     try {
       const response = await fetch(`/api/documents/${documentId}/accept-invite`, {
         method: "POST",
         credentials: "include",
       });
+      
       if (response.ok) {
-        // Remove the accepted invite from the list
+        // Remove the accepted invite from the list immediately
         setInvites(prev => prev.filter(invite => invite.documentId !== documentId));
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.error("Failed to accept invite:", errorData.error || response.statusText);
+        // Optionally show an error message to the user
       }
     } catch (error) {
       console.error("Error accepting invite:", error);
     } finally {
-      setProcessingInvite(null);
+      setProcessingInvites(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(documentId);
+        return newMap;
+      });
     }
   };
 
   const handleRejectInvite = async (documentId: string) => {
-    setProcessingInvite(documentId);
+    // Prevent multiple clicks on the same invite
+    if (processingInvites.has(documentId)) return;
+    
+    setProcessingInvites(prev => new Map(prev).set(documentId, 'reject'));
     try {
       const response = await fetch(`/api/documents/${documentId}/reject-invite`, {
         method: "POST",
         credentials: "include",
       });
+      
       if (response.ok) {
-        // Remove the rejected invite from the list
+        // Remove the rejected invite from the list immediately
         setInvites(prev => prev.filter(invite => invite.documentId !== documentId));
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.error("Failed to reject invite:", errorData.error || response.statusText);
+        // Optionally show an error message to the user
       }
     } catch (error) {
       console.error("Error rejecting invite:", error);
     } finally {
-      setProcessingInvite(null);
+      setProcessingInvites(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(documentId);
+        return newMap;
+      });
     }
   };
 
@@ -186,47 +214,52 @@ export default function PendingInvites() {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          {invites.map((invite) => (
-            <div
-              key={invite.documentId}
-              className="flex items-center justify-between p-4 border rounded-lg bg-muted/30"
-            >
-              <div className="flex-1 min-w-0">
-                <h4 className="font-medium text-base truncate">
-                  {invite.documentTitle}
-                </h4>
-                <p className="text-sm text-muted-foreground">
-                  Invited {formatMaybeTimestamp(invite.invite.createdAt)}
-                </p>
+          {invites.map((invite) => {
+            const processingAction = processingInvites.get(invite.documentId);
+            const isProcessing = processingAction !== undefined;
+            
+            return (
+              <div
+                key={invite.documentId}
+                className="flex items-center justify-between p-4 border rounded-lg bg-muted/30"
+              >
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-medium text-base truncate">
+                    {invite.documentTitle}
+                  </h4>
+                  <p className="text-sm text-muted-foreground">
+                    Invited {formatMaybeTimestamp(invite.invite.createdAt)}
+                  </p>
+                </div>
+                <div className="flex gap-2 ml-4">
+                  <Button
+                    size="sm"
+                    onClick={() => handleAcceptInvite(invite.documentId)}
+                    disabled={isProcessing}
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    {processingAction === 'accept' ? (
+                      <RiRefreshLine className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <RiCheckLine className="h-3 w-3" />
+                    )}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => handleRejectInvite(invite.documentId)}
+                    disabled={isProcessing}
+                  >
+                    {processingAction === 'reject' ? (
+                      <RiRefreshLine className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <RiCloseLine className="h-3 w-3" />
+                    )}
+                  </Button>
+                </div>
               </div>
-              <div className="flex gap-2 ml-4">
-                <Button
-                  size="sm"
-                  onClick={() => handleAcceptInvite(invite.documentId)}
-                  disabled={processingInvite === invite.documentId}
-                  className="bg-green-600 hover:bg-green-700"
-                >
-                  {processingInvite === invite.documentId ? (
-                    <RiRefreshLine className="h-3 w-3 animate-spin" />
-                  ) : (
-                    <RiCheckLine className="h-3 w-3" />
-                  )}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  onClick={() => handleRejectInvite(invite.documentId)}
-                  disabled={processingInvite === invite.documentId}
-                >
-                  {processingInvite === invite.documentId ? (
-                    <RiRefreshLine className="h-3 w-3 animate-spin" />
-                  ) : (
-                    <RiCloseLine className="h-3 w-3" />
-                  )}
-                </Button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </CardContent>
     </Card>

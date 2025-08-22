@@ -15,13 +15,10 @@ import {
   RiShareLine,
   RiTeamLine,
   RiRefreshLine,
-  RiUserLine,
-  RiCheckLine,
-  RiCloseLine,
-  RiLoader4Line
+  RiUserAddLine,
 } from "@remixicon/react";
 import { format } from "date-fns";
-import { collection, doc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot } from "firebase/firestore";
 import { useEffect, useState as useReactState } from "react";
 import { db } from "@/lib/firebase-client";
 import type { DocumentData } from "@/lib/firestore-types";
@@ -43,28 +40,35 @@ interface Collaborator {
   lastSeen?: Date;
 }
 
-export default function DocumentSidebar({ docId, onRollback }: DocumentSidebarProps) {
+export default function DocumentSidebar({
+  docId,
+  onRollback,
+}: DocumentSidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(true);
-  const [activeTab, setActiveTab] = useState<'history' | 'collaborators' | 'invite' | 'share' | 'invites'>('history');
-  const [documentData, setDocumentData] = useReactState<DocumentData | null>(null);
+  const [activeTab, setActiveTab] = useState<
+    "history" | "collaborators" | "invite" | "share" | "invites"
+  >("history");
+  const [documentData, setDocumentData] = useReactState<DocumentData | null>(
+    null
+  );
   const [collaborators, setCollaborators] = useReactState<Collaborator[]>([]);
-  const [userProfiles, setUserProfiles] = useReactState<Map<string, any>>(new Map());
+  const [userProfiles, setUserProfiles] = useReactState<Map<string, any>>(
+    new Map()
+  );
   const [pendingInvites, setPendingInvites] = useReactState<any[]>([]);
   const { userId } = useAuth();
   const { user: currentUser } = useUser();
   // Fixed width sidebar (40rem)
 
-
-
   // Fetch user profiles from Clerk
   const fetchUserProfiles = async (userIds: string[]) => {
     try {
       const uniqueIds = Array.from(new Set(userIds));
-      const res = await fetch('/api/users/profiles', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ ids: uniqueIds })
+      const res = await fetch("/api/users/profiles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ ids: uniqueIds }),
       });
       const profiles = new Map();
       if (res.ok) {
@@ -75,7 +79,7 @@ export default function DocumentSidebar({ docId, onRollback }: DocumentSidebarPr
       }
       return profiles;
     } catch (error) {
-      console.error('Error fetching user profiles:', error);
+      console.error("Error fetching user profiles:", error);
       return new Map();
     }
   };
@@ -105,7 +109,7 @@ export default function DocumentSidebar({ docId, onRollback }: DocumentSidebarPr
               email: profile.email,
               imageUrl: profile.imageUrl,
               isOnline: Math.random() > 0.5, // TODO: Implement real online status
-              lastSeen: new Date(Date.now() - Math.random() * 1000000)
+              lastSeen: new Date(Date.now() - Math.random() * 1000000),
             });
           }
         });
@@ -122,9 +126,12 @@ export default function DocumentSidebar({ docId, onRollback }: DocumentSidebarPr
 
     const fetchPendingInvites = async () => {
       try {
-        const response = await fetch(`/api/documents/${docId}/invites/pending`, {
-          credentials: "include",
-        });
+        const response = await fetch(
+          `/api/documents/${docId}/invites/pending`,
+          {
+            credentials: "include",
+          }
+        );
         if (response.ok) {
           const data = await response.json();
           setPendingInvites(data.invites || []);
@@ -147,24 +154,26 @@ export default function DocumentSidebar({ docId, onRollback }: DocumentSidebarPr
         return format(new Date(value), "MMM d, yyyy");
       }
       if (typeof value === "object") {
-        if (typeof value.toDate === "function") return format(value.toDate(), "MMM d, yyyy");
-        if (value._seconds) return format(new Date(value._seconds * 1000), "MMM d, yyyy");
+        if (typeof value.toDate === "function")
+          return format(value.toDate(), "MMM d, yyyy");
+        if (value._seconds)
+          return format(new Date(value._seconds * 1000), "MMM d, yyyy");
       }
     } catch {}
     return "";
   };
 
   const tabs = [
-    { id: 'history', label: 'Version History', icon: RiHistoryLine },
-    { id: 'collaborators', label: 'Collaborators', icon: RiTeamLine },
-    { id: 'invites', label: 'Manage Invites', icon: RiMailLine },
-    { id: 'invite', label: 'Invite', icon: RiMailLine },
-    { id: 'share', label: 'Share', icon: RiShareLine },
+    { id: "history", label: "Version History", icon: RiHistoryLine },
+    { id: "collaborators", label: "Collaborators", icon: RiTeamLine },
+    { id: "invites", label: "Manage Invites", icon: RiMailLine },
+    { id: "invite", label: "Invite Someone", icon: RiUserAddLine },
+    { id: "share", label: "Share", icon: RiShareLine },
   ] as const;
 
   if (isCollapsed) {
     return (
-      <div className="fixed right-0 top-1/2 transform -translate-y-1/2 z-40 md:top-16 md:-translate-y-0">
+      <div className="fixed right-0 top-1/2 z-40">
         <Button
           variant="outline"
           size="sm"
@@ -186,175 +195,204 @@ export default function DocumentSidebar({ docId, onRollback }: DocumentSidebarPr
         className="fixed inset-0 z-30"
         onClick={() => setIsCollapsed(true)}
       />
-      <div
-        className="fixed right-0 top-16 h-[calc(100%-4rem)] w-full sm:w-[28rem] md:w-[32rem] lg:w-[36rem] xl:w-[40rem] bg-background border-l border-border shadow-lg z-40 flex flex-col select-none"
-      >
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b">
-        <h3 className="font-semibold">Document Tools</h3>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setIsCollapsed(true)}
-        >
-          <RiArrowRightLine className="h-4 w-4" />
-        </Button>
-      </div>
-
-      {/* Tab Navigation */}
-      <div className="flex flex-wrap border-b">
-        {tabs.map((tab) => (
+      <div className="fixed right-0 top-[5rem] h-[calc(100%-5rem)] w-full sm:w-[28rem] md:w-[32rem] lg:w-[36rem] xl:w-[40rem] bg-background border-l border-border shadow-lg z-40 flex flex-col select-none">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b">
+          <h3 className="font-semibold">Document Tools</h3>
           <Button
-            key={tab.id}
-            variant={activeTab === tab.id ? "default" : "ghost"}
+            variant="ghost"
             size="sm"
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 rounded-none border-b-2 ${activeTab === tab.id
-              ? "border-primary bg-primary text-primary-foreground"
-              : "border-transparent"
-              }`}
+            onClick={() => setIsCollapsed(true)}
           >
-            <tab.icon className="h-4 w-4 mr-1" />
-            <span className="text-xs">{tab.label}</span>
+            <RiArrowRightLine className="h-4 w-4" />
           </Button>
-        ))}
-      </div>
+        </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4">
-        {activeTab === 'history' && (
-          <VersionHistory docId={docId} onRollback={onRollback} />
-        )}
+        {/* Tab Navigation */}
+        <div className="flex flex-wrap border-b">
+          {tabs.map((tab) => (
+            <Button
+              key={tab.id}
+              variant={activeTab === tab.id ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex-1 rounded-none border-b-2 ${
+                activeTab === tab.id
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-transparent"
+              }`}
+            >
+              <tab.icon className="h-4 w-4 mr-1" />
+              <span className="text-xs">{tab.label}</span>
+            </Button>
+          ))}
+        </div>
 
-        {activeTab === 'collaborators' && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Badge variant="secondary">{collaborators.length}</Badge>
-            </div>
-            {collaborators.length === 0 ? (
-              <div className="text-center py-8 text-sm text-muted-foreground">
-                No collaborators yet
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-4">
+          {activeTab === "history" && (
+            <VersionHistory docId={docId} onRollback={onRollback} />
+          )}
+
+          {activeTab === "collaborators" && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold">Collaborators</h3>
+                <Badge variant="secondary">{collaborators.length}</Badge>
               </div>
-            ) : (
-              <div className="space-y-2">
-                {collaborators.map((collab) => (
-                  <Card key={collab.id} className="p-3">
-                    <CardContent className="p-0">
-                      <div className="flex items-center space-x-3">
-                        <div className="relative">
-                          <Avatar className="w-8 h-8">
-                            <AvatarImage src={collab.imageUrl} alt={collab.name} />
-                            <AvatarFallback className="text-xs">
-                              {collab.name.split(' ').map(n => n[0]).join('').toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          {collab.isOnline && (
-                            <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-background"></div>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-medium truncate">{collab.name}</p>
-                            {collab.id === documentData?.ownerId && (
-                              <Badge variant="outline" className="text-xs px-1 py-0">
-                                Owner
-                              </Badge>
+              {collaborators.length === 0 ? (
+                <div className="text-center py-8 text-sm text-muted-foreground">
+                  No collaborators yet
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {collaborators.map((collab) => (
+                    <Card key={collab.id} className="p-3">
+                      <CardContent className="p-0">
+                        <div className="flex items-center space-x-3">
+                          <div className="relative">
+                            <Avatar className="w-8 h-8">
+                              <AvatarImage
+                                src={collab.imageUrl}
+                                alt={collab.name}
+                              />
+                              <AvatarFallback className="text-xs">
+                                {collab.name
+                                  .split(" ")
+                                  .map((n) => n[0])
+                                  .join("")
+                                  .toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                            {collab.isOnline && (
+                              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-background"></div>
                             )}
                           </div>
-                          <p className="text-xs text-muted-foreground truncate">{collab.email}</p>
-                          {collab.lastSeen && (
-                            <p className="text-xs text-muted-foreground">
-                              Last seen {format(collab.lastSeen, "MMM d, h:mm a")}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium truncate">
+                                {collab.name}
+                              </p>
+                              {collab.id === documentData?.ownerId && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-xs px-1 py-0"
+                                >
+                                  Owner
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {collab.email}
                             </p>
-                          )}
+                            {collab.lastSeen && (
+                              <p className="text-xs text-muted-foreground">
+                                Last seen{" "}
+                                {format(collab.lastSeen, "MMM d, h:mm a")}
+                              </p>
+                            )}
+                          </div>
+                          <Badge
+                            variant={collab.isOnline ? "default" : "secondary"}
+                            className="text-xs"
+                          >
+                            {collab.isOnline ? "Online" : "Offline"}
+                          </Badge>
                         </div>
-                        <Badge variant={collab.isOnline ? "default" : "secondary"} className="text-xs">
-                          {collab.isOnline ? "Online" : "Offline"}
-                        </Badge>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === 'invites' && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Badge variant="secondary">{pendingInvites.length}</Badge>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  // Refresh invites
-                  if (documentData?.ownerId === userId) {
-                    const fetchPendingInvites = async () => {
-                      try {
-                        const response = await fetch(`/api/documents/${docId}/invites/pending`, {
-                          credentials: "include",
-                        });
-                        if (response.ok) {
-                          const data = await response.json();
-                          setPendingInvites(data.invites || []);
-                        }
-                      } catch (error) {
-                        console.error("Error fetching pending invites:", error);
-                      }
-                    };
-                    fetchPendingInvites();
-                  }
-                }}
-              >
-                <RiRefreshLine className="h-3 w-3" />
-              </Button>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </div>
-            {pendingInvites.length === 0 ? (
-              <div className="text-center py-8 text-sm text-muted-foreground">
-                No pending invitations
+          )}
+
+          {activeTab === "invites" && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold">Manage Invites</h3>
+                  <Badge variant="secondary">{pendingInvites.length}</Badge>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    // Refresh invites
+                    if (documentData?.ownerId === userId) {
+                      const fetchPendingInvites = async () => {
+                        try {
+                          const response = await fetch(
+                            `/api/documents/${docId}/invites/pending`,
+                            {
+                              credentials: "include",
+                            }
+                          );
+                          if (response.ok) {
+                            const data = await response.json();
+                            setPendingInvites(data.invites || []);
+                          }
+                        } catch (error) {
+                          console.error(
+                            "Error fetching pending invites:",
+                            error
+                          );
+                        }
+                      };
+                      fetchPendingInvites();
+                    }
+                  }}
+                >
+                  <RiRefreshLine className="h-3 w-3" />
+                </Button>
               </div>
-            ) : (
-              <div className="space-y-2">
-                {pendingInvites.map((invite) => (
-                  <Card key={invite.id} className="p-3">
-                    <CardContent className="p-0">
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{invite.email}</p>
-                          <p className="text-xs text-muted-foreground">
-                            Sent {formatMaybeTimestamp(invite.createdAt)}
-                          </p>
-                          {invite.expiresAt && (
-                            <p className="text-xs text-muted-foreground">
-                              Expires {formatMaybeTimestamp(invite.expiresAt)}
+              {pendingInvites.length === 0 ? (
+                <div className="text-center py-8 text-sm text-muted-foreground">
+                  No pending invitations
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {pendingInvites.map((invite) => (
+                    <Card key={invite.id} className="p-3">
+                      <CardContent className="p-0">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">
+                              {invite.email}
                             </p>
-                          )}
+                            <p className="text-xs text-muted-foreground">
+                              Sent {formatMaybeTimestamp(invite.createdAt)}
+                            </p>
+                            {invite.expiresAt && (
+                              <p className="text-xs text-muted-foreground">
+                                Expires {formatMaybeTimestamp(invite.expiresAt)}
+                              </p>
+                            )}
+                          </div>
+                          <Badge variant="secondary" className="text-xs">
+                            Pending
+                          </Badge>
                         </div>
-                        <Badge variant="secondary" className="text-xs">
-                          Pending
-                        </Badge>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
-        {activeTab === 'invite' && (
-          <div className="space-y-3">
-            <InviteCollaborator docId={docId} />
-          </div>
-        )}
+          {activeTab === "invite" && (
+            <div className="space-y-3">
+              <InviteCollaborator docId={docId} />
+            </div>
+          )}
 
-        {activeTab === 'share' && (
-          <div className="space-y-3">
-            <ShareAccess docId={docId} />
-          </div>
-        )}
-      </div>
+          {activeTab === "share" && (
+            <div className="space-y-3">
+              <ShareAccess docId={docId} />
+            </div>
+          )}
+        </div>
       </div>
     </>
   );

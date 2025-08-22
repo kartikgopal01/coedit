@@ -23,13 +23,31 @@ export async function GET(request: NextRequest) {
       invite: InviteData;
     }> = [];
 
+    const now = new Date();
+
     inboxSnap.forEach((inboxDoc) => {
       const data = inboxDoc.data() as any;
       const invite = data.invite as InviteData;
       if (!invite) return;
-      const expires = invite.expiresAt as any;
-      const notExpired = !expires || (typeof expires.toDate === 'function' ? expires.toDate() : new Date(expires)) > new Date();
-      if (invite.status === 'pending' && notExpired) {
+
+      // Check if invite is still pending
+      if (invite.status !== 'pending') return;
+
+      // Check if invite has expired
+      let isExpired = false;
+      if (invite.expiresAt) {
+        try {
+          const expiresDate = typeof invite.expiresAt.toDate === 'function' 
+            ? invite.expiresAt.toDate() 
+            : new Date(invite.expiresAt);
+          isExpired = expiresDate < now;
+        } catch (error) {
+          console.error("Error parsing expiresAt:", error);
+          isExpired = false; // Default to not expired if we can't parse
+        }
+      }
+
+      if (!isExpired) {
         pendingInvites.push({
           documentId: data.documentId,
           documentTitle: data.documentTitle || 'Untitled',

@@ -31,6 +31,17 @@ export async function POST(
     // Check if invite is still valid (not expired)
     if (inviteData.expiresAt && inviteData.expiresAt.toDate() < new Date()) {
       await inviteRef.delete();
+      // Also clean up the user's inbox
+      try {
+        const inboxRef = adminDb
+          .collection("users")
+          .doc(userId)
+          .collection("invites")
+          .doc(id);
+        await inboxRef.delete();
+      } catch (inboxError) {
+        console.error("Failed to clean up inbox:", inboxError);
+      }
       return NextResponse.json(
         { error: "Invitation has expired" },
         { status: 410 },
@@ -47,6 +58,18 @@ export async function POST(
       collaborators: FieldValue.arrayUnion(userId),
       updatedAt: FieldValue.serverTimestamp(),
     });
+
+    // Clean up the user's inbox - remove the invite entry
+    try {
+      const inboxRef = adminDb
+        .collection("users")
+        .doc(userId)
+        .collection("invites")
+        .doc(id);
+      await inboxRef.delete();
+    } catch (inboxError) {
+      console.error("Failed to clean up inbox:", inboxError);
+    }
 
     return NextResponse.json({
       message: "Invitation accepted successfully",
